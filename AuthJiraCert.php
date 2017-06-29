@@ -25,23 +25,26 @@ class AuthJiraCert
     /**
      * @var string - The URL of the Jira installiation to talk to
      */
-    public $jiraBaseUrl = "https://".$JIRA_DOMAIN."/";
+    public $jiraBaseUrl;
     /**
      * Randomized string as chosen in https://YOUR-JIRA-URL/plugins/servlet/applinks/listApplicationLinks
      * @var string
      */
-    public $consumerKey = $OAUTH_CONSUMER_KEY;
+    public $consumerKey;
     /**
      * Fully qualified path of the private key file as generated using the openssl statement in the class comment.
      * @var string
      */
-    public $privateKeyFile = $OAUTH_PRIVATE_KEY_FILE;
+    public $privateKeyFile;
 
     /**
      * AuthJiraCert constructor.
      */
     function __construct()
     {
+	$this->jiraBaseUrl = "https://".$GLOBALS['JIRA_DOMAIN']."/";
+	$this->consumerKey = $GLOBALS['OAUTH_CONSUMER_KEY'];
+	$this->privateKeyFile = $GLOBALS['OAUTH_PRIVATE_KEY_FILE'];
         $this->requestTokenUrl = $this->jiraBaseUrl . 'plugins/servlet/oauth/request-token';
         $this->accessTokenUrl = $this->jiraBaseUrl . 'plugins/servlet/oauth/access-token';
     }
@@ -96,7 +99,7 @@ class AuthJiraCert
         //), 2);
 
         $authorizeUrl = $this->jiraBaseUrl . 'plugins/servlet/oauth/authorize?oauth_token=' . $paramsFromStep1['oauth_token'];
-        echo 'Please grant authorization to your Jira account to '.$WEBSITE_TITLE.' by clicking here: <a href="' . $authorizeUrl . '">' . $authorizeUrl . '</a>';
+        echo 'Please grant authorization to your Jira account to '.$GLOBALS['WEBSITE_TITLE'].' by clicking here: <a href="' . $authorizeUrl . '">' . $authorizeUrl . '</a>';
     }
 
     /**
@@ -160,9 +163,9 @@ class AuthJiraCert
     }
 
     private function step5_saveToken($oAuthToken, $oauthSecret) {
-	setcookie($COOKIE_PREFIX."_jira_oauth_token", $oAuthToken, time() + (10 * 365 * 24 * 60 * 60), '/');
-	setcookie($COOKIE_PREFIX."_jira_oauth_secret", $oauthSecret, time() + (10 * 365 * 24 * 60 * 60), '/');
-	header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
+	setcookie($GLOBALS['COOKIE_PREFIX']."_jira_oauth_token", $oAuthToken, time() + (10 * 365 * 24 * 60 * 60), '/');
+	setcookie($GLOBALS['COOKIE_PREFIX']."_jira_oauth_secret", $oauthSecret, time() + (10 * 365 * 24 * 60 * 60), '/');
+	header('Location: https://'.$GLOBALS['HOSTED_DOMAIN'].$_SERVER['REQUEST_URI']);
         //$this->printJiraSteps(array(
         //    'COMPLETED: Request (short-lived) "request-token" ==> completed',
         //    'COMPLETED: Authorize request-token and retrieve oauth_verifier',

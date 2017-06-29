@@ -13,7 +13,7 @@ function runHledger($params, $input, &$output)
 	$cwd = '/tmp';
 	$env = array();
 
-	$process = proc_open($PATH_TO_HLEDGER_BINARY.' '.$params, $descriptorspec, $pipes, $cwd, $env);
+	$process = proc_open($GLOBALS['PATH_TO_HLEDGER_BINARY'].' '.$params, $descriptorspec, $pipes, $cwd, $env);
 
 	if (is_resource($process)) {
 	    // $pipes now looks like this:
@@ -140,7 +140,7 @@ function generateLedgerTable($ledgerCsv, $transpose = false, $issueReference = n
 						$csvOutput .= "\"";
 						if ($issueReference !== NULL && $txnidx !== NULL)
 						{
-							$output .= $issueReference[(int)($ledger[$i][$txnidx]) - 1].": <a href=\"https://".$JIRA_DOMAIN."/browse/".$issueReference[(int)($ledger[$i][$txnidx]) - 1]."\">";
+							$output .= $issueReference[(int)($ledger[$i][$txnidx]) - 1].": <a href=\"https://".$GLOBALS['JIRA_DOMAIN']."/browse/".$issueReference[(int)($ledger[$i][$txnidx]) - 1]."\">";
 							$csvOutput .= $issueReference[(int)($ledger[$i][$txnidx]) - 1].": ";
 						}
 						if ($ledger[$i][$j][0] == "(")
