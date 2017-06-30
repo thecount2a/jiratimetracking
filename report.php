@@ -40,48 +40,44 @@ else
 	}
 	if ($authorizedReporter)
 	{
-
-		$currentTask = "";
-		if ($redis->exists($myself["key"].'_currentTask'))
+		if ($_GET["output"] != "json")
 		{
-			$currentTask = $redis->get($myself["key"].'_currentTask');
-		}
-
-		echo "<html><head><title>".$REPORTING_WEBSITE_TITLE."</title>";
-		echo "<style>";
-		echo "table.niceborder { border-collapse: collapse; }";
-		echo "table.niceborder,th.niceborder,td.niceborder { border: 1px solid black; }";
-		echo "form{ display:inline; margin:0px; padding:0px;}";
-		echo "#buttonpair { overflow: hidden; }";
-		echo "#buttonpair input { float:right }";
-		echo "</style>";
-		echo $EXTRA_HEAD_HTML;
-		echo "</head><body>";
-		echo "<p align=\"right\">";
-		if (!$redis->exists($myself["key"].'_projects'))
-		{
-			$url = $obj->jiraBaseUrl . 'rest/api/2/project';
-			$projectListJson = json_encode($client->performRequest($url, "GET"));
-			$projectList = json_decode($projectListJson);
-			$redis->set($myself["key"].'_projects', $projectListJson);
-			$redis->expire($myself["key"].'_projects', 600);
-		}
-		else
-		{
-			$projectList = json_decode($redis->get($myself["key"].'_projects'));
-		}
-		echo "<b>Projects:</b> ";
-		for ($i = 0; $i < count($projectList); $i++)
-		{
-			if ($projectList[$i]->key != "TEST")
+			echo "<html><head><title>".$REPORTING_WEBSITE_TITLE."</title>";
+			echo "<style>";
+			echo "table.niceborder { border-collapse: collapse; }";
+			echo "table.niceborder,th.niceborder,td.niceborder { border: 1px solid black; }";
+			echo "form{ display:inline; margin:0px; padding:0px;}";
+			echo "#buttonpair { overflow: hidden; }";
+			echo "#buttonpair input { float:right }";
+			echo "</style>";
+			echo $EXTRA_HEAD_HTML;
+			echo "</head><body>";
+			echo "<p align=\"right\">";
+			if (!$redis->exists($myself["key"].'_projects'))
 			{
-				echo "<a href=\"https://".$JIRA_DOMAIN."/projects/".$projectList[$i]->key."/issues\">".$projectList[$i]->key."</a> &nbsp;&nbsp;";
+				$url = $obj->jiraBaseUrl . 'rest/api/2/project';
+				$projectListJson = json_encode($client->performRequest($url, "GET"));
+				$projectList = json_decode($projectListJson);
+				$redis->set($myself["key"].'_projects', $projectListJson);
+				$redis->expire($myself["key"].'_projects', 600);
 			}
-		}
+			else
+			{
+				$projectList = json_decode($redis->get($myself["key"].'_projects'));
+			}
+			echo "<b>Projects:</b> ";
+			for ($i = 0; $i < count($projectList); $i++)
+			{
+				if ($projectList[$i]->key != "TEST")
+				{
+					echo "<a href=\"https://".$JIRA_DOMAIN."/projects/".$projectList[$i]->key."/issues\">".$projectList[$i]->key."</a> &nbsp;&nbsp;";
+				}
+			}
 
-		echo "<b> &ndash; &nbsp;&nbsp;".$myself["displayName"]." &nbsp;&nbsp;&ndash;&nbsp;&nbsp; </b>";
-		echo "<a href=\"index.php\">Home</a> &nbsp;&nbsp;&ndash;&nbsp;&nbsp;";
-		echo "<a href=\"index.php?logout=true\">Logout</a><br/><br/></p>";
+			echo "<b> &ndash; &nbsp;&nbsp;".$myself["displayName"]." &nbsp;&nbsp;&ndash;&nbsp;&nbsp; </b>";
+			echo "<a href=\"index.php\">Home</a> &nbsp;&nbsp;&ndash;&nbsp;&nbsp;";
+			echo "<a href=\"index.php?logout=true\">Logout</a><br/><br/></p>";
+		}
 
 		// Generate timecard
 		$startTime = new DateTime("now", new DateTimeZone("America/New_York"));
@@ -148,65 +144,74 @@ else
 			}
 			$decodedObjs[] = $obj;
 		}
-		$reports = array("Project Summary", "Billing Summary", "User Summary", "Individual Entries");
-		echo "<h3>Current Report:</h3><form action=\"".$_SERVER['REQUEST_URI']."\" method=\"GET\"><table cellpadding=\"10\"><tr>";
-		echo "<td valign=\"top\">Report:<br/><select name=\"report\" onChange=\"this.form.submit();\">";
-		for ($i = 0; $i < count($reports); $i++)
+		if ($_GET["output"] != "json")
 		{
-			echo "<option value=\"".$reports[$i]."\"".($_GET["report"] == $reports[$i]?" selected=\"selected\"":"").">".$reports[$i]."</option>";
+			$reports = array("Project Summary", "Billing Summary", "User Summary", "Individual Entries");
+			echo "<h3>Current Report:</h3><form action=\"".$_SERVER['REQUEST_URI']."\" method=\"GET\"><table cellpadding=\"10\"><tr>";
+			echo "<td valign=\"top\">Report:<br/><select name=\"report\" onChange=\"this.form.submit();\">";
+			for ($i = 0; $i < count($reports); $i++)
+			{
+				echo "<option value=\"".$reports[$i]."\"".($_GET["report"] == $reports[$i]?" selected=\"selected\"":"").">".$reports[$i]."</option>";
+			}
+			echo "</select>";
+			echo "<br/><br/>Period:<br/><select name=\"period\" onChange=\"this.form.submit();\">";
+			$periods = array("This Week", "Last Week", "This Month", "Last Month", "Year to Date", "Last Year");
+			for ($i = 0; $i < count($periods); $i++)
+			{
+				echo "<option value=\"".$periods[$i]."\"".($_GET["period"] == $periods[$i]?" selected=\"selected\"":"").">".$periods[$i]."</option>";
+			}
+			echo "</select>";
+			echo "<br/><br/>Grouping:<br/><select name=\"grouping\" onChange=\"this.form.submit();\">";
+			$groupings = array("Daily", "Weekly", "Monthly", "Yearly");
+			for ($i = 0; $i < count($groupings); $i++)
+			{
+				echo "<option value=\"".$groupings[$i]."\"".($_GET["grouping"] == $groupings[$i]?" selected=\"selected\"":"").">".$groupings[$i]."</option>";
+			}
+			echo "</select></td>";
+			echo "<td>User(s):<br/><select name=\"user[]\" size=\"10\" multiple=\"on\" onChange=\"this.form.submit();\">";
+			for ($i = 0; $i < count($users); $i++)
+			{
+				echo "<option value=\"".$users[$i]."\"".(gettype($_GET["user"]) == "array" && array_search($users[$i], $_GET["user"]) !== FALSE?" selected=\"on\"": "").">".$users[$i]."</option>";
+			}
+			echo "</select></td>";
+			echo "<td valign=\"top\">Merge:<br/><select name=\"merge\" onChange=\"this.form.submit();\">";
+			$merge = array("Split Users", "Merge Users");
+			for ($i = 0; $i < count($merge); $i++)
+			{
+				echo "<option value=\"".$merge[$i]."\"".($_GET["merge"] == $merge[$i]?" selected=\"selected\"":"").">".$merge[$i]."</option>";
+			}
+			echo "</select>";
+			echo "<br/><br/>Transpose:<br/><select name=\"transpose\" onChange=\"this.form.submit();\">";
+			$transpose = array("Off", "On");
+			for ($i = 0; $i < count($transpose); $i++)
+			{
+				echo "<option value=\"".$transpose[$i]."\"".($_GET["transpose"] == $transpose[$i]?" selected=\"selected\"":"").">".$transpose[$i]."</option>";
+			}
+			echo "</select>";
+			echo "<br/><br/>Task Filter:<br/><input type=\"text\" size=\"15\" value=\"".htmlentities($_GET["taskfilter"])."\" name=\"taskfilter\" onChange=\"this.form.submit();\">";
+			echo "</td>";
+			echo "<td>Project(s):<br/><select name=\"project[]\" size=\"10\" multiple=\"on\" onChange=\"this.form.submit();\">";
+			for ($i = 0; $i < count($projectList); $i++)
+			{
+				echo "<option value=\"".$projectList[$i]->key."\"".(gettype($_GET["project"]) == "array" && array_search($projectList[$i]->key, $_GET["project"]) !== FALSE?" selected=\"on\"": "").">".$projectList[$i]->key."</option>";
+			}
+			echo "</select></td>";
+			echo "</tr></table>";
 		}
-		echo "</select>";
-		echo "<br/><br/>Period:<br/><select name=\"period\" onChange=\"this.form.submit();\">";
-		$periods = array("This Week", "Last Week", "This Month", "Last Month", "Year to Date", "Last Year");
-		for ($i = 0; $i < count($periods); $i++)
-		{
-			echo "<option value=\"".$periods[$i]."\"".($_GET["period"] == $periods[$i]?" selected=\"selected\"":"").">".$periods[$i]."</option>";
-		}
-		echo "</select>";
-		echo "<br/><br/>Grouping:<br/><select name=\"grouping\" onChange=\"this.form.submit();\">";
-		$groupings = array("Daily", "Weekly", "Monthly", "Yearly");
-		for ($i = 0; $i < count($groupings); $i++)
-		{
-			echo "<option value=\"".$groupings[$i]."\"".($_GET["grouping"] == $groupings[$i]?" selected=\"selected\"":"").">".$groupings[$i]."</option>";
-		}
-		echo "</select></td>";
-		echo "<td>User(s):<br/><select name=\"user[]\" size=\"10\" multiple=\"on\" onChange=\"this.form.submit();\">";
-		for ($i = 0; $i < count($users); $i++)
-		{
-			echo "<option value=\"".$users[$i]."\"".(gettype($_GET["user"]) == "array" && array_search($users[$i], $_GET["user"]) !== FALSE?" selected=\"on\"": "").">".$users[$i]."</option>";
-		}
-		echo "</select></td>";
-		echo "<td valign=\"top\">Merge:<br/><select name=\"merge\" onChange=\"this.form.submit();\">";
-		$merge = array("Split Users", "Merge Users");
-		for ($i = 0; $i < count($merge); $i++)
-		{
-			echo "<option value=\"".$merge[$i]."\"".($_GET["merge"] == $merge[$i]?" selected=\"selected\"":"").">".$merge[$i]."</option>";
-		}
-		echo "</select>";
-		echo "<br/><br/>Transpose:<br/><select name=\"transpose\" onChange=\"this.form.submit();\">";
-		$transpose = array("Off", "On");
-		for ($i = 0; $i < count($transpose); $i++)
-		{
-			echo "<option value=\"".$transpose[$i]."\"".($_GET["transpose"] == $transpose[$i]?" selected=\"selected\"":"").">".$transpose[$i]."</option>";
-		}
-		echo "</select>";
-		echo "<br/><br/>Task Filter:<br/><input type=\"text\" size=\"15\" value=\"".htmlentities($_GET["taskfilter"])."\" name=\"taskfilter\" onChange=\"this.form.submit();\">";
-		echo "</td>";
-		echo "<td>Project(s):<br/><select name=\"project[]\" size=\"10\" multiple=\"on\" onChange=\"this.form.submit();\">";
-		for ($i = 0; $i < count($projectList); $i++)
-		{
-			echo "<option value=\"".$projectList[$i]->key."\"".(gettype($_GET["project"]) == "array" && array_search($projectList[$i]->key, $_GET["project"]) !== FALSE?" selected=\"on\"": "").">".$projectList[$i]->key."</option>";
-		}
-		echo "</select></td>";
-		echo "</tr></table>";
 
 		if (!$_GET["report"])
 		{
-			echo "<input type=\"submit\" value=\"Run\"></form>";
+			if ($_GET["output"] != "json")
+			{
+				echo "<input type=\"submit\" value=\"Run\"></form>";
+			}
 		}
 		else
 		{
-			echo "</form>";
+			if ($_GET["output"] != "json")
+			{
+				echo "</form>";
+			}
 			$userList = $users;
 			if ($_GET["merge"] == "Merge Users" || $_GET["report"] == "User Summary")
 			{
@@ -223,6 +228,7 @@ else
 			{
 				$userList = $_GET["user"];
 			}
+			$jsonResult = array();
 			for ($u = 0; $u < count($userList); $u++)
 			{
 				$ledgerStr = "";
@@ -295,8 +301,20 @@ else
 					$ledgerreturn = runHledger("-f - reg -O csv ", $ledgerStr, $ledgerCsv);
 					$result = generateLedgerTable($ledgerCsv, false, $issueReference, $dataReference, $includeUserColumn);
 				}
-				echo "<h3>".$_GET["report"]." for ".$userList[$u].":</h3>".$result->output;
-				echo "<button onClick=\"this.nextSibling.nextSibling.style.display = '';\">Get CSV</button><br/><textarea style=\"width: 90%; height: 500px;display: none\">".$result->csv."</textarea>";
+				if ($_GET["output"] != "json")
+				{
+					echo "<h3>".$_GET["report"]." for ".$userList[$u].":</h3>".$result->output;
+					echo "<button onClick=\"this.nextSibling.nextSibling.style.display = '';\">Get CSV</button><br/><textarea style=\"width: 90%; height: 500px;display: none\">".$result->csv."</textarea>";
+				}
+				else
+				{
+					$jsonResult[$userList[$u]] = array_map("str_getcsv", explode("\n", trim($result->csv)));
+				}
+			}
+			if ($_GET["output"] == "json")
+			{
+				header('Content-Type: application/json');
+				echo json_encode($jsonResult);
 			}
 		}
 	}
