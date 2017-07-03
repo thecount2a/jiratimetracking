@@ -112,10 +112,13 @@ else
 			<style>
 			    table.niceborder { border-collapse: collapse; }
 			    table.niceborder,th.niceborder,td.niceborder { border: 1px solid black; }
+			    table.hours { }
+			    td.hours { padding-right: 5px; padding-left: 5px;}
 			    form{ display:inline; margin:0px; padding:0px;}
 			    #buttonpair { overflow: hidden; }
 			    #buttonpair input { float:right }
 			    @media print { .no-print, .no-print * { display: none !important; } }
+			    @media print { div.hours { text-align: center; } table.hours { width: 60%; font-size: 70%; margin: 0 auto; } }
 			    .grid {width: 1400px;height: 600px;}
 			</style>
 			<script src="angular.js"></script>
@@ -155,12 +158,36 @@ else
 			  <input type="button" value="Delete" ng-click="deleteRow();">
 			</div>
 			</div>
-			<div ng-repeat="employee in payroll_data.employee_info"><p style="page-break-after:always;">
-				<img src="logo.png">
+			<div ng-repeat="employee in payroll_data.employee_info" ng-if="employee.active">
 				<?php echo $COMPANY_PAYROLL_HEADER ?>
-				<span>{{employee.name}}</span>
+				<br/>
+				<table cellpadding="3" class="hours" style="margin: 0;">
+				<tr><th align="right">Employee:</td><td>{{ employee.name }}</td></tr>
+				<tr><th align="right">Monthly Rate:</td><td>{{ employee.rate | currency }}</td></tr>
+				<tr><th align="right">Monthly Benefits:</td><td>{{ employee.monthly_benefits | currency }}</td></tr>
+				</table>
+				<br/>
+				<div class="hours"><table cellpadding="3" border="1" class="niceborder hours">
+				<tr><th>Date \ Project #</th><th ng-repeat="col in users[employee.id][0]" ng-if="$index > 0">{{ col.split('_')[col.split('_').length-1] }}</th></tr>
+				<tr ng-repeat="row in users[employee.id] track by $index" ng-if="$index > 0 && !allitemszero(row)"><th>{{ row[0] }}</th><td class="hours" align="right" ng-repeat="col in row track by $index" ng-if="$index > 0"><div ng-if="col != '0'">{{ col }}h</div></td></tr>
+				<tr><td></td><td align="center" style="color: gray;"  ng-repeat="col in users[employee.id][0]" ng-if="$index > 0 && $index < users[employee.id][0].length-1">{{ lookupCode(col.split('_')[col.split('_').length-1], employee.project_payable_cutoff) }}</td><td></td></tr>
+				</table></div>
+				<br/>
+				<table cellpadding="1" class="hours">
+				<tr><th align="right">Labor Hours:</td><td class="hours">{{ laborHours() }}</td></tr>
+				<tr><th align="right">Payable Labor Hours:</td><td class="hours">{{ payableLaborHours(employee.id, employee.project_payable_cutoff) | number : 2 }}</td></tr>
+				<tr><th align="right">Logged Unpaid Vac:</td><td class="hours">{{ loggedUnpaidVac(employee.id, employee.project_payable_cutoff) | number : 2 }}</td></tr>
+				<tr><th align="right">Hours Paid:</td><td class="hours">{{ Math.min(laborHours() - loggedUnpaidVac(employee.id, employee.project_payable_cutoff), payableLaborHours(employee.id, employee.project_payable_cutoff)) | number : 2 }}</td></tr>
+				<tr><th align="right">Hours Unpaid:</td><td class="hours">{{ payableLaborHours(employee.id, employee.project_payable_cutoff) - Math.min(laborHours() - loggedUnpaidVac(employee.id, employee.project_payable_cutoff), payableLaborHours(employee.id, employee.project_payable_cutoff)) | number : 2 }}</td></tr>
+				<tr><th align="right">Hours Short:</td><td class="hours">{{ Math.max(Math.max(laborHours() - payableLaborHours(employee.id, employee.project_payable_cutoff), 0)-loggedUnpaidVac(employee.id, employee.project_payable_cutoff), 0) | number : 2 }}</td><th align="right">Starting Vacation:</th><td class="hours">{{ vacationTally(employee.id, beginningoftime, currenttimespanstart) | number : 2 }}</td></tr>
+				<tr><th align="right">Paid Vacation Hours:</td><td class="hours">{{ -vacationTally(employee.id, currenttimespanstart, currenttimespanend, 0) | number : 2 }}</td><th align="right">Earned Vacation:</th><td class="hours">{{ vacationTally(employee.id, currenttimespanstart, currenttimespanend, 1) | number : 2 }}</td></tr>
+				<tr><th align="right">Unpaid Vacation:</td><td class="hours">{{ loggedUnpaidVac(employee.id, employee.project_payable_cutoff) + Math.max(Math.max(laborHours() - payableLaborHours(employee.id, employee.project_payable_cutoff), 0)-loggedUnpaidVac(employee.id, employee.project_payable_cutoff), 0) + vacationTally(employee.id, currenttimespanstart, currenttimespanend, 0) | number : 2 }}</td><th align="right">Vacation Available:</th><td class="hours">{{ vacationTally(employee.id, beginningoftime, currenttimespanend) | number : 2 }}</td></tr>
+				<tr><th align="right">Total Paid Fraction:</td><td class="hours">{{ Math.min((Math.min(laborHours() - loggedUnpaidVac(employee.id, employee.project_payable_cutoff), payableLaborHours(employee.id, employee.project_payable_cutoff)) - vacationTally(employee.id, currenttimespanstart, currenttimespanend, 0)) / laborHours(), 1) | number : 2 }}</td></tr>
+				<tr><th align="right">Benefits:</td><td class="hours">{{ employee.monthly_benefits | currency }}</td><th align="right">Gross Pay:</th><td class="hours">{{ ((employee.rate * Math.min((Math.min(laborHours() - loggedUnpaidVac(employee.id, employee.project_payable_cutoff), payableLaborHours(employee.id, employee.project_payable_cutoff)) - vacationTally(employee.id, currenttimespanstart, currenttimespanend, 0)) / laborHours(), 1)) + employee.monthly_benefits) | currency }}</td></tr>
+				</table>
 				
-			</p></div>
+				
+			<p style="page-break-after:always;">&nbsp;</p></div>
 			</div>
 			</div>
 			</body></html>

@@ -33,7 +33,11 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
 	.error(function(data, status) {
 		alert("Failed to load payroll data: " + data);
     });
+    $scope.Math = window.Math;
     $scope.currenttimespan = $scope.timespans[0];
+    $scope.beginningoftime = new Date(0);
+    $scope.currenttimespanstart = null;
+    $scope.currenttimespanend = null
     $scope.savePayroll = function () {
 	var key = sha256.pbkdf2(nacl.util.decodeUTF8($scope.payroll_key), nacl.util.decodeUTF8($cookies.get("timetracking_user")), 10000, 32);
 	// Only save and generate new nonce if data changes
@@ -119,6 +123,15 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
 	}
     };
     $scope.addRow = function () {
+	var rows = $scope.gridApi.selection.getSelectedRows();
+	for (var i = 0; i < $scope.gridOptions.data.length; i++)
+	{
+		if ($scope.gridOptions.data[i] == rows[0])
+		{
+			$scope.gridOptions.data.splice(i, 0, {});
+			return;
+		}
+	}
 	$scope.gridOptions.data.push({});
     }
     $scope.deleteRow = function () {
@@ -131,6 +144,68 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
 			break;
 		}
 	}
+    }
+    $scope.allitemszero = function (items) {
+	for (var i = 1; i < items.length; i++)
+	{
+		if (items[i] != "0")
+		{
+			return false;
+		}
+	}
+	return true;
+    }
+    $scope.lookupCode = function (code, cutoff) {
+	if (code=="1999") { return "Vacation"; }
+	else if (code=="0099") { return "UP Vac"; }
+	else if (Number(code) >= cutoff) { return "Paid"; }
+	else { return "Unpaid"; }
+    }
+    $scope.laborHours = function () {
+	return 176.0;
+    }
+    $scope.payableLaborHours = function (empId, cutoff) {
+	var hours = 0.0;
+	for (var col in $scope.users[empId][$scope.users[empId].length-1])
+	{
+		if (col != 0 && col != $scope.users[empId][$scope.users[empId].length-1].length -1)
+		{
+			if ($scope.lookupCode($scope.users[empId][0][col].split('_')[1], cutoff) == "Paid")
+			{
+				hours += Number($scope.users[empId][$scope.users[empId].length-1][col]);
+			}
+		}
+	}
+	return hours;
+    }
+    $scope.loggedUnpaidVac = function (empId, cutoff) {
+	var logged = 0.0;
+	for (var col in $scope.users[empId][$scope.users[empId].length-1])
+	{
+		if (col != 0 && col != $scope.users[empId][$scope.users[empId].length-1].length -1)
+		{
+			if ($scope.lookupCode($scope.users[empId][0][col].split('_')[1], cutoff) == "UP Vac")
+			{
+				logged += Number($scope.users[empId][$scope.users[empId].length-1][col]);
+			}
+		}
+	}
+	return logged;
+    }
+    $scope.vacationTally = function (empId, fromDate, toDate, selectSign = -1) {
+	var tally = 0.0;
+	for (var i = 0; i < $scope.payroll_data.vacation_history.length; i++)
+	{
+		var thisDate = new Date($scope.payroll_data.vacation_history[i].date);
+		if (empId == $scope.payroll_data.vacation_history[i].id && thisDate >= fromDate && thisDate <= toDate)
+		{
+			if (selectSign < 0 || (selectSign == 1 && $scope.payroll_data.vacation_history[i].hours > 0) || (selectSign == 0 && $scope.payroll_data.vacation_history[i].hours < 0))
+			{
+				tally += $scope.payroll_data.vacation_history[i].hours;
+			}
+		}
+	}
+	return tally;
     }
     $scope.finishEdit = function () {
     }
@@ -155,7 +230,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
 		}
 		$scope.gridOptions.columnDefs = [{field: 'id', displayName: 'ID'},
 						 {field: 'name', displayName: 'Name'},
-						 {field: 'rate', displayName: 'Rate', type: "number", cellFilter: "currency"},
+						 {field: 'rate', displayName: 'Per Period Rate', type: "number", cellFilter: "currency"},
 						 {field: 'project_payable_cutoff', displayName: 'Project Payable Cutoff', type: "number"},
 						 {field: 'monthly_benefits', displayName: 'Monthly Benefits', type: "number", cellFilter: "currency"},
 						 {field: 'annual_vacation_days', displayName: 'Annual Vacation Days', type: "number"},
@@ -185,7 +260,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
 		}
 		$scope.gridOptions.columnDefs = [{field: 'id', displayName: 'Employee ID'},
 						 {field: 'date', displayName: 'Date Earned', type: "date", cellFilter: 'date:"yyyy-MM-dd"'},
-						 {field: 'days', displayName: 'Days', type: "number"}
+						 {field: 'hours', displayName: 'Hours', type: "number"}
 						];
 		$scope.gridOptions.data = $scope.payroll_data.vacation_history;
 	}
@@ -217,9 +292,52 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
 	}
     };
     $scope.computePayroll = function (force) {
-    	$http.get("report.php?period="+$scope.currenttimespan+"&output=json&report=Billing+Summary&grouping=Daily&merge=Split+Users&transpose=Off&taskfilter=")
+	var parts = $scope.currenttimespan.split(' - ');
+	$scope.currenttimespanstart = new Date(parts[0]);
+	$scope.currenttimespanend = new Date(parts[1]);
+    	$http.get("report.php?period="+$scope.currenttimespan+"&output=json&report=Billing+Summary&grouping=Daily&merge=Split+Users&transpose=On&taskfilter=")
     	    .success(function(data) {
-    	      $scope.users = data;
+    	      	$scope.users = data;
+	      	if (!$scope.payroll_data.timespans)
+	      	{
+			$scope.payroll_data.timespans = [];
+	      	}
+	      	if (new Date() > $scope.currenttimespanend && ($scope.payroll_data.timespans.indexOf($scope.currenttimespan) < 0 || force))
+	      	{
+			var new_vacation = [];
+			// Get rid of already computed vacation numbers for this period
+			for (var i = 0; i < $scope.payroll_data.vacation_history.length; i++)
+			{
+				var thisDate = new Date($scope.payroll_data.vacation_history[i].date);
+				if (thisDate < $scope.currenttimespanstart || thisDate > $scope.currenttimespanend)
+				{
+					new_vacation.push($scope.payroll_data.vacation_history[i]);
+				}
+			}
+			$scope.payroll_data.vacation_history = new_vacation;
+			for (var idx in $scope.payroll_data.employee_info)
+			{
+				if (data[$scope.payroll_data.employee_info[idx].id])
+				{
+					var empId = $scope.payroll_data.employee_info[idx].id;
+					var empPayableCutoff = $scope.payroll_data.employee_info[idx].project_payable_cutoff;
+					var earned_rate = $scope.payroll_data.employee_info[idx].annual_vacation_days / (365 * 5 / 7 - $scope.payroll_data.employee_info[idx].annual_vacation_days);
+					var earned_hours = Math.min($scope.laborHours() - $scope.loggedUnpaidVac(empId), $scope.payableLaborHours(empId, empPayableCutoff)) * earned_rate;
+					$scope.payroll_data.vacation_history.push({id: empId, date: $scope.currenttimespanend, hours: earned_hours});
+					var hours_short = Math.max(Math.max($scope.laborHours() - $scope.payableLaborHours(empId, empPayableCutoff), 0)-$scope.loggedUnpaidVac(empId), 0);
+					var unlogged_vacation_hours = Math.min(hours_short, $scope.vacationTally(empId, $scope.beginningoftime, $scope.currenttimespanend));
+					if (unlogged_vacation_hours > 0.00000001)
+					{
+						$scope.payroll_data.vacation_history.push({id: empId, date: $scope.currenttimespanend, hours: -unlogged_vacation_hours});
+					}
+				}
+				else
+				{
+					alert("Missing data in report for user " + $scope.payroll_data.employee_info[idx].id);
+				}
+			}
+			$scope.payroll_data.timespans.push($scope.currenttimespan);
+		}	
     	});
     };
     

@@ -126,6 +126,14 @@ else
 			$endTime = new DateTime("now", new DateTimeZone("America/New_York"));
 			$endTime->setDate($endTime->format('Y'), 1, 1)->setTime(0,0,0);
 		}
+		else if (strpos($_GET["period"], ' - ') !== FALSE)
+		{
+			$parts = explode(' - ', $_GET["period"]);
+			$startTime = new DateTime($parts[0], new DateTimeZone("America/New_York"));
+			$startTime->setTime(0,0,0);
+			$endTime = new DateTime($parts[1], new DateTimeZone("America/New_York"));
+			$endTime->setTime(23,59,59);
+		}
 		$reportStartTime = (int) $startTime->format('U');
 		$reportEndTime = (int) $endTime->format('U');
 		//echo $reportStartTime. " " . $startTime->format("Y/m/d H:i:s");
