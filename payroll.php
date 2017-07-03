@@ -135,6 +135,10 @@ else
 			<script src="nacl-util.min.js"></script>
 			<script src="sha256.min.js"></script>
 			<script src="payroll.js"></script>
+			<script>
+				var QUICKBOOKS_COMPANY_NAME = '<?php echo $QUICKBOOKS_COMPANY_NAME; ?>';
+				var QUICKBOOKS_CREATE_TIME  = '<?php echo $QUICKBOOKS_CREATE_TIME; ?>';
+			</script>
 
 			<?php echo $EXTRA_HEAD_HTML; ?>
 			</head><body ng-app="payrollApp">
@@ -150,9 +154,11 @@ else
 			</select>
 			<input type="button" value="Save" ng-click="savePayroll();">
 			<input type="button" value="Force Recompute" ng-click="computePayroll(true);">
+			<input type="button" value="Edit Raw Data" ng-click="editRawData();">
 			<input type="button" value="Edit Employee Info" ng-click="editEmployeeInfo();">
 			<input type="button" value="Edit Vacation History" ng-click="editVacationHistory();">
 			<input type="button" value="Edit QuickBooks Mapping" ng-click="editQuickbooksMapping();">
+			<input type="button" value="Generate QuickBooks" ng-click="generateQuickbooks();">
 			<div class="well" ng-hide="hideGrid">
 			  <div ui-grid="gridOptions" ui-grid-edit ui-grid-selection class="grid"></div>
 			  <input type="button" value="Add" ng-click="addRow();">
@@ -166,6 +172,7 @@ else
 				<tr><th align="right">Employee:</td><td>{{ employee.name }}</td></tr>
 				<tr><th align="right">Monthly Rate:</td><td>{{ employee.rate | currency }}</td></tr>
 				<tr><th align="right">Monthly Benefits:</td><td>{{ employee.monthly_benefits | currency }}</td></tr>
+				<tr><th align="right">Vacation Rate:</td><td>{{ employee.annual_vacation_days / (365 * 5 / 7 - employee.annual_vacation_days) | number : 6 }}</td></tr>
 				</table>
 				<br/>
 				<div class="hours"><table cellpadding="3" border="1" class="niceborder hours">
