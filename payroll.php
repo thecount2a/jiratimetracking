@@ -118,8 +118,9 @@ else
 			    #buttonpair { overflow: hidden; }
 			    #buttonpair input { float:right }
 			    @media print { .no-print, .no-print * { display: none !important; } }
-			    @media print { div.hours { text-align: center; } table.hours { width: 60%; font-size: 70%; margin: 0 auto; } }
+			    @media print { div.hours { text-align: center; } table.hours { width: 60%; font-size: 60%; margin: 0 auto; } }
 			    .grid {width: 1400px;height: 600px;}
+			    div.sign { border-top: 1px solid black; }
 			</style>
 			<script src="angular.js"></script>
 			<script src="angular-touch.js"></script>
@@ -185,6 +186,14 @@ else
 				<tr><th align="right">Total Paid Fraction:</td><td class="hours">{{ Math.min((Math.min(laborHours() - loggedUnpaidVac(employee.id, employee.project_payable_cutoff), payableLaborHours(employee.id, employee.project_payable_cutoff)) - vacationTally(employee.id, currenttimespanstart, currenttimespanend, 0)) / laborHours(), 1) | number : 2 }}</td></tr>
 				<tr><th align="right">Benefits:</td><td class="hours">{{ employee.monthly_benefits | currency }}</td><th align="right">Gross Pay:</th><td class="hours">{{ ((employee.rate * Math.min((Math.min(laborHours() - loggedUnpaidVac(employee.id, employee.project_payable_cutoff), payableLaborHours(employee.id, employee.project_payable_cutoff)) - vacationTally(employee.id, currenttimespanstart, currenttimespanend, 0)) / laborHours(), 1)) + employee.monthly_benefits) | currency }}</td></tr>
 				</table>
+			<br/><br/>
+			<div class="sign">
+			Employee Signature<span style="float: right;padding-right: 250px;">Date</span>
+			</div>
+			<br/>
+			<div class="sign">
+			Supervisor Signature<span style="float: right;padding-right: 250px;">Date</span>
+			</div>
 				
 				
 			<p style="page-break-after:always;">&nbsp;</p></div>
