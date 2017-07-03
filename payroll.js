@@ -41,7 +41,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
     $scope.savePayroll = function () {
 	var key = sha256.pbkdf2(nacl.util.decodeUTF8($scope.payroll_key), nacl.util.decodeUTF8($cookies.get("timetracking_user")), 10000, 32);
 	// Only save and generate new nonce if data changes
-	if (nacl.util.encodeBase64($scope.blob_nonce) + ':' + nacl.util.encodeBase64(nacl.secretbox(nacl.util.decodeUTF8(JSON.stringify($scope.payroll_data)), $scope.blob_nonce, key)) != $scope.blob)
+	if (!$scope.blob || (nacl.util.encodeBase64($scope.blob_nonce) + ':' + nacl.util.encodeBase64(nacl.secretbox(nacl.util.decodeUTF8(JSON.stringify($scope.payroll_data)), $scope.blob_nonce, key)) != $scope.blob))
 	{
 		var nonce = nacl.randomBytes(24);
 		var box = nacl.secretbox(nacl.util.decodeUTF8(JSON.stringify($scope.payroll_data)), nonce, key); 
