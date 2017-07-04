@@ -124,7 +124,7 @@ else
 			    #buttonpair { overflow: hidden; }
 			    #buttonpair input { float:right }
 			    @media print { .no-print, .no-print * { display: none !important; } }
-			    @media print { div.hours { text-align: center; } table.hours { width: 60%; font-size: 60%; margin: 0 auto; } }
+			    @media print { div.hours { text-align: center; } table.hours { width: 60%; font-size: 85%; margin: 0 auto; } }
 			    .grid {width: 1400px;height: 600px;}
 			    div.sign { border-top: 1px solid black; }
 			</style>
@@ -149,6 +149,10 @@ else
 			<?php echo $EXTRA_HEAD_HTML; ?>
 			</head><body ng-app="payrollApp">
 			<div ng-controller="payrollController">
+			<div ng-show="editRaw">
+			<textarea style="width: 400px; height: 100px;" ng-model="editRawTextarea"></textarea>
+			<input type="button" value="Save" ng-click="saveRawData();"/>
+			</div>
 			<div ng-show="blob_loaded && !payroll_decrypted">
 				<p>Warning: If you lose this password, your payroll data is gone forever.  There is no way to recover it due to the nature of the encryption being used in this tool.</p>
 				<input type="password" ng-model="payroll_key" /><input type="button" value="Decrypt" ng-click="decryptBlob();"/>
@@ -172,16 +176,18 @@ else
 			</div>
 			</div>
 			<div ng-repeat="employee in payroll_data.employee_info" ng-if="employee.active">
+				<table cellpadding="3"><tr><td>
 				<?php echo $COMPANY_PAYROLL_HEADER ?>
-				<br/>
-				<table cellpadding="3" class="hours" style="margin: 0;">
+				</td><td>
+				<table cellpadding="3">
 				<tr><th align="right">Employee:</td><td>{{ employee.name }}</td></tr>
 				<tr><th align="right">Monthly Rate:</td><td>{{ employee.rate | currency }}</td></tr>
 				<tr><th align="right">Monthly Benefits:</td><td>{{ employee.monthly_benefits | currency }}</td></tr>
 				<tr><th align="right">Vacation Rate:</td><td>{{ employee.annual_vacation_days / (365 * 5 / 7 - employee.annual_vacation_days) | number : 6 }}</td></tr>
 				</table>
+				</td></tr></table>
 				<br/>
-				<div class="hours"><table cellpadding="3" border="1" class="niceborder hours">
+				<div class="hours"><table cellpadding="2" border="1" class="niceborder hours">
 				<tr><th>Date \ Project #</th><th ng-repeat="col in users[employee.id][0]" ng-if="$index > 0">{{ col.split('_')[col.split('_').length-1] }}</th></tr>
 				<tr ng-repeat="row in users[employee.id] track by $index" ng-if="$index > 0 && !allitemszero(row)"><th>{{ row[0] }}</th><td class="hours" align="right" ng-repeat="col in row track by $index" ng-if="$index > 0"><div ng-if="col != '0'">{{ col }}h</div></td></tr>
 				<tr><td></td><td align="center" style="color: gray;"  ng-repeat="col in users[employee.id][0]" ng-if="$index > 0 && $index < users[employee.id][0].length-1">{{ lookupCode(col.split('_')[col.split('_').length-1], employee.project_payable_cutoff) }}</td><td></td></tr>

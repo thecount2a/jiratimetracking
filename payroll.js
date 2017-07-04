@@ -17,6 +17,8 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 
     $scope.hideGrid = true;
     $scope.currentEdit = null;
+    $scope.editRaw = false;
+    $scope.editRawTextarea = "";
     $scope.gridOptions = {};
     $scope.gridOptions.multiSelect = false;
 
@@ -60,8 +62,11 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 	{
 		var nonce = nacl.randomBytes(24);
 		var box = nacl.secretbox(nacl.util.decodeUTF8(JSON.stringify($scope.payroll_data)), nonce, key); 
-		$http.post("payroll.php?blob=true", nacl.util.encodeBase64(nonce)+':'+nacl.util.encodeBase64(box))
+		var newblob = nacl.util.encodeBase64(nonce)+':'+nacl.util.encodeBase64(box);
+		$http.post("payroll.php?blob=true", newblob)
 			.success(function(data) {
+			$scope.blob = newblob;
+			$scope.blob_nonce = nonce;
 		})
 			.error(function(data, status) {
 				alert("Failed to save payroll data: " + data);
@@ -297,10 +302,19 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
     $scope.editRawData = function () {
 	$scope.hideGrid = true;
 	$scope.currentEdit = null;
-	var newData = prompt(JSON.stringify($scope.payroll_data));
-	if (newData)
+	$scope.editRaw = true;
+	$scope.editRawTextarea = JSON.stringify($scope.payroll_data);
+    }
+    $scope.saveRawData = function () {
+	var parsed = JSON.parse($scope.editRawTextarea);
+	if (parsed)
 	{
-		$scope.payroll_data = JSON.parse(newData);
+		$scope.editRaw = false;
+		$scope.payroll_data = parsed;
+	}
+	else
+	{
+		alert("Failed to parse data");
 	}
     }
     $scope.computePayroll = function (force) {
