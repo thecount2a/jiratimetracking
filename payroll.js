@@ -182,7 +182,17 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 	else { return "Unpaid"; }
     }
     $scope.laborHours = function () {
-	return 176.0;
+        var count = 0;
+        var curDate = angular.copy($scope.currenttimespanstart);
+        while (curDate <= $scope.currenttimespanend) {
+            var dayOfWeek = curDate.getDay();
+            if(!((dayOfWeek == 6) || (dayOfWeek == 0)))
+	    {
+               count++;
+	    }
+            curDate.setDate(curDate.getDate() + 1);
+        }
+        return count*8;
     }
     $scope.payableLaborHours = function (empId, cutoff) {
 	var hours = 0.0;
@@ -371,16 +381,36 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 		}	
     	});
     };
+    $scope.formatTimeQuickBooks = function (hours) {
+	return Math.floor(hours).toString() + ':' + pad(Math.round((hours-Math.floor(hours))*60), 2);
+    }
+    $scope.downloadFile = function(filename, text) {
+        var element = document.createElement('a');
+        element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+        element.setAttribute('download', filename);
+        element.style.display = 'none';
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+    }
     $scope.generateQuickbooks = function () {
 	var code_to_quickbooks = {};
 	for (var mapping in $scope.payroll_data.quickbooks_mapping)
 	{
-		code_to_quickbooks[$scope.payroll_data.quickbooks_mapping[mapping].code] = $scope.payroll_data.quickbooks_mapping[mapping].quickbooks;
+		code_to_quickbooks[$scope.payroll_data.quickbooks_mapping[mapping].code] = $scope.payroll_data.quickbooks_mapping[mapping].quickbooks ? $scope.payroll_data.quickbooks_mapping[mapping].quickbooks : "";
 	}
-	var quickbooksText = '';
+	var dashDateStr = $scope.currenttimespanend.getFullYear().toString() + "-" + pad($scope.currenttimespanend.getMonth()+1, 2) + "-" + pad($scope.currenttimespanend.getDate(), 2);
+	var unixDate = Math.floor($scope.currenttimespanend.getTime() / 1000);
+	var quickbooksText = '!TIMERHDR\tVER\tREL\tCOMPANYNAME\tIMPORTEDBEFORE\tFROMTIMER\tCOMPANYCREATETIME\nTIMERHDR\t8\t0\t'+QUICKBOOKS_COMPANY_NAME+'\tN\tN\t'+QUICKBOOKS_CREATE_TIME+'\n';
+	quickbooksText += '!HDR\tPROD\tVER\tREL\tIIFVER\tDATE\tTIME\tACCNTNT\tACCNTNTSPLITTIME\nHDR\tQuickBooks Pro for Windows\tVersion 6.0D\tRelease R11P\t1\t'+dashDateStr+'\t'+unixDate.toString()+'\tN\t0\n';
+	quickbooksText += '!TIMEACT\tDATE\tJOB\tEMP\tITEM\tPITEM\tDURATION\tNOTE\tBILLINGSTATUS\n';
+	var dateStr = pad($scope.currenttimespanend.getMonth()+1, 2) + "/" + pad($scope.currenttimespanend.getDate(), 2) + "/" + $scope.currenttimespanend.getFullYear().toString().substr(2, 2);
 	for (var idx in $scope.payroll_data.employee_info)
 	{
 		var empId = $scope.payroll_data.employee_info[idx].id;
+		var qbName = $scope.payroll_data.employee_info[idx].quickbooksname;
+		var qbItem = $scope.payroll_data.employee_info[idx].quickbooksitem;
+		var qbPitem = $scope.payroll_data.employee_info[idx].quickbookspitem;
 		var aggregate = {};
 		if ($scope.users[empId])
 		{
@@ -389,7 +419,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 				if (col > 0 && col < $scope.users[empId][0].length - 1)
 				{
 					var code = $scope.users[empId][0][col].split('_')[$scope.users[empId][0][col].split('_').length-1];
-					if (code_to_quickbooks[code])
+					if (code_to_quickbooks[code] != undefined)
 					{
 						if (aggregate[code_to_quickbooks[code]])
 						{
@@ -415,9 +445,10 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 		}
 		for (var quickbooks in aggregate)
 		{
-			quickbooksText += 'TIMEACT\t'+date+'\t';
+			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+quickbooks+'\t'+qbName+'\t'+qbItem+'\t'+qbPitem+'\t'+$scope.formatTimeQuickBooks(aggregate[quickbooks])+'\t\t0\n';
 		}
 	}
+	$scope.downloadFile("payroll.iif", quickbooksText);
     }
     
 }]);
