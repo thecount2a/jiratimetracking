@@ -5,20 +5,35 @@ function pad(n, width, z) {
 }
 
 var app = angular.module("payrollApp", ['ngTouch', 'ui.grid', 'ui.grid.edit', 'ui.grid.selection', 'ngCookies']);
-app.controller("payrollController", ["$scope", "$http", "$cookies", function($scope, $http, $cookies) {
+app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", function($scope, $http, $cookies, $window) {
     $scope.users = [];
     $scope.timespans = [];
     $scope.blob = null;
     $scope.blob_loaded = false;
     $scope.blob_nonce = null;
     $scope.payroll_data = {};
-    $scope.payroll_key = null;
+    $scope.payroll_key = "";
     $scope.payroll_decrypted = false;
 
     $scope.hideGrid = true;
     $scope.currentEdit = null;
     $scope.gridOptions = {};
     $scope.gridOptions.multiSelect = false;
+
+    $window.onbeforeunload = function (event) {
+	var key = sha256.pbkdf2(nacl.util.decodeUTF8($scope.payroll_key), nacl.util.decodeUTF8($cookies.get("timetracking_user")), 10000, 32);
+	if ($scope.blob_nonce)
+	{
+		if(nacl.util.encodeBase64($scope.blob_nonce) + ':' + nacl.util.encodeBase64(nacl.secretbox(nacl.util.decodeUTF8(JSON.stringify($scope.payroll_data)), $scope.blob_nonce, key)) != $scope.blob)
+		{
+		    return "Are you sure you want to leave with unsaved changes?";
+		}
+	}
+	return;
+    }
+    $scope.$on('$destroy', function(e) {
+	$window.onbeforeunload = undefined;
+    });
 
     $scope.gridOptions.onRegisterApi = function(gridApi) {
           //set gridApi on scope
@@ -207,21 +222,14 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
 	}
 	return tally;
     }
-    $scope.finishEdit = function () {
-    }
     $scope.editEmployeeInfo = function () {
 	if ($scope.currentEdit == "employeeInfo")
 	{
-		$scope.finishEdit();
 		$scope.hideGrid = true;
 		$scope.currentEdit = null;
 	}
 	else
 	{
-		if ($scope.currentEdit)
-		{
-			$scope.finishEdit();
-		}
 		$scope.currentEdit = "employeeInfo";
 		$scope.hideGrid = false;
 		if (!$scope.payroll_data.employee_info)
@@ -245,16 +253,11 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
     $scope.editVacationHistory = function () {
 	if ($scope.currentEdit == "vacationHistory")
 	{
-		$scope.finishEdit();
 		$scope.hideGrid = true;
 		$scope.currentEdit = null;
 	}
 	else
 	{
-		if ($scope.currentEdit)
-		{
-			$scope.finishEdit();
-		}
 		$scope.currentEdit = "vacationHistory";
 		$scope.hideGrid = false;
 		if (!$scope.payroll_data.vacation_history)
@@ -264,6 +267,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
 		$scope.gridOptions.columnDefs = [{field: 'id', displayName: 'Employee ID'},
 						 {field: 'date', displayName: 'Date Earned', type: "date", cellFilter: 'date:"yyyy-MM-dd"'},
 						 {field: 'hours', displayName: 'Hours', type: "number"},
+						 {field: 'auto', displayName: 'Auto Generated', enableCellEdit: false, width: "10%", type: "boolean"},
 						 {field: 'comment', displayName: 'Comment'}
 						];
 		$scope.gridOptions.data = $scope.payroll_data.vacation_history;
@@ -272,16 +276,11 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
     $scope.editQuickbooksMapping = function () {
 	if ($scope.currentEdit == "quickbooksMapping")
 	{
-		$scope.finishEdit();
 		$scope.hideGrid = true;
 		$scope.currentEdit = null;
 	}
 	else
 	{
-		if ($scope.currentEdit)
-		{
-			$scope.finishEdit();
-		}
 		$scope.currentEdit = "quickbooksMapping";
 		$scope.hideGrid = false;
 		if (!$scope.payroll_data.quickbooks_mapping)
@@ -296,6 +295,8 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
 	}
     };
     $scope.editRawData = function () {
+	$scope.hideGrid = true;
+	$scope.currentEdit = null;
 	var newData = prompt(JSON.stringify($scope.payroll_data));
 	if (newData)
 	{
@@ -304,6 +305,8 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
     }
     $scope.computePayroll = function (force) {
 	var parts = $scope.currenttimespan.split(' - ');
+	$scope.hideGrid = true;
+	$scope.currentEdit = null;
 	$scope.currenttimespanstart = new Date(parts[0]);
 	$scope.currenttimespanend = new Date(parts[1]);
     	$http.get("report.php?period="+$scope.currenttimespan+"&output=json&report=Billing+Summary&grouping=Daily&merge=Split+Users&transpose=On&taskfilter=")
@@ -320,7 +323,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
 			for (var i = 0; i < $scope.payroll_data.vacation_history.length; i++)
 			{
 				var thisDate = new Date($scope.payroll_data.vacation_history[i].date);
-				if (thisDate < $scope.currenttimespanstart || thisDate > $scope.currenttimespanend)
+				if (!$scope.payroll_data.vacation_history[i].auto || (thisDate < $scope.currenttimespanstart || thisDate > $scope.currenttimespanend))
 				{
 					new_vacation.push($scope.payroll_data.vacation_history[i]);
 				}
@@ -334,12 +337,12 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", function($sc
 					var empPayableCutoff = $scope.payroll_data.employee_info[idx].project_payable_cutoff;
 					var earned_rate = $scope.payroll_data.employee_info[idx].annual_vacation_days / (365 * 5 / 7 - $scope.payroll_data.employee_info[idx].annual_vacation_days);
 					var earned_hours = Math.min($scope.laborHours() - $scope.loggedUnpaidVac(empId), $scope.payableLaborHours(empId, empPayableCutoff)) * earned_rate;
-					$scope.payroll_data.vacation_history.push({id: empId, date: $scope.currenttimespanend, hours: earned_hours, comment: "Autogenerated earned vacation"});
+					$scope.payroll_data.vacation_history.push({id: empId, date: $scope.currenttimespanend, hours: earned_hours, comment: "Earned vacation", auto: true});
 					var hours_short = Math.max(Math.max($scope.laborHours() - $scope.payableLaborHours(empId, empPayableCutoff), 0)-$scope.loggedUnpaidVac(empId), 0);
 					var unlogged_vacation_hours = Math.min(hours_short, $scope.vacationTally(empId, $scope.beginningoftime, $scope.currenttimespanend));
 					if (unlogged_vacation_hours > 0.00000001)
 					{
-						$scope.payroll_data.vacation_history.push({id: empId, date: $scope.currenttimespanend, hours: -unlogged_vacation_hours, comment: "Autogenerated vacation spent"});
+						$scope.payroll_data.vacation_history.push({id: empId, date: $scope.currenttimespanend, hours: -unlogged_vacation_hours, comment: "Vacation spent", auto: true});
 					}
 				}
 				else

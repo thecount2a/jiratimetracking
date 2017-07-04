@@ -88,6 +88,12 @@ else
 					$validate = '/^[a-zA-Z0-9=\/+:]*$/';
 					if (preg_match($validate, $contents) && ((file_exists($path.'/'.$file) && is_readable($path.'/'.$file) && is_writable($path.'/'.$file)) || (!file_exists($path.'/'.$file) && is_readable($path) && is_writable($path))))
 					{
+						$iter = 0;
+						while(file_exists($path.'/'.$file.".".$iter))
+						{
+							$iter++;
+						}
+						rename($path.'/'.$file, $path.'/'.$file.".".$iter);
 						$fp = fopen($path.'/'.$file, 'w');
 						fwrite($fp, $contents);
 						fclose($fp);
