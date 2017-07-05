@@ -51,6 +51,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 		alert("Failed to load payroll data: " + data);
     });
     $scope.Math = window.Math;
+    $scope.Number = Number;
     $scope.currenttimespan = $scope.timespans[0];
     $scope.beginningoftime = new Date(0);
     $scope.currenttimespanstart = null;
@@ -181,14 +182,32 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 	else if (Number(code) >= cutoff) { return "Paid"; }
 	else { return "Unpaid"; }
     }
-    $scope.laborHours = function () {
+    $scope.formatDate = function (datestr) {
+	var dateobj = new Date(datestr);
+	return pad(dateobj.getMonth()+1, 2) + "/" + pad(dateobj.getDate(), 2) + "/" + dateobj.getFullYear();
+    }
+    $scope.laborHours = function (empId, ignoreStartEnd = false) {
         var count = 0;
         var curDate = angular.copy($scope.currenttimespanstart);
+	var empStartDate = null;
+	var empEndDate = null;
+	for (var idx in $scope.payroll_data.employee_info)
+	{
+		if ($scope.payroll_data.employee_info[idx].id == empId)
+		{
+			empStartDate = new Date($scope.payroll_data.employee_info[idx].start_date);
+			empEndDate = $scope.payroll_data.employee_info[idx].end_date ? new Date($scope.payroll_data.employee_info[idx].end_date) : null;
+			break;
+		}
+	}
         while (curDate <= $scope.currenttimespanend) {
             var dayOfWeek = curDate.getDay();
             if(!((dayOfWeek == 6) || (dayOfWeek == 0)))
 	    {
-               count++;
+		if (ignoreStartEnd || (curDate >= empStartDate && (empEndDate ? (curDate <= empEndDate) : true)))
+		{
+		    count++;
+		}
 	    }
             curDate.setDate(curDate.getDate() + 1);
         }
@@ -222,6 +241,19 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 	}
 	return logged;
     }
+    $scope.hoursPaid = function (empId, cutoff) {
+	return Math.min($scope.laborHours(empId) - $scope.loggedUnpaidVac(empId, cutoff), $scope.payableLaborHours(empId, cutoff));
+    }
+    $scope.hoursShort = function (empId, cutoff) {
+	return Math.max(Math.max($scope.laborHours(empId) - $scope.payableLaborHours(empId, cutoff), 0) - $scope.loggedUnpaidVac(empId, cutoff), 0);
+    }
+    $scope.paidVacationHours = function (empId) {
+	return -$scope.vacationTally(empId, $scope.currenttimespanstart, $scope.currenttimespanend, 0);
+    }
+    $scope.totalPaidFraction = function (empId, cutoff) {
+	return Math.min(($scope.hoursPaid(empId, cutoff) + $scope.paidVacationHours(empId)) / $scope.laborHours(empId), 1);
+    }
+
     $scope.vacationTally = function (empId, fromDate, toDate, selectSign = -1) {
 	var tally = 0.0;
 	for (var i = 0; i < $scope.payroll_data.vacation_history.length; i++)
@@ -260,6 +292,8 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 						 {field: 'project_payable_cutoff', displayName: 'Project Payable Cutoff', type: "number"},
 						 {field: 'monthly_benefits', displayName: 'Monthly Benefits', type: "number", cellFilter: "currency"},
 						 {field: 'annual_vacation_days', displayName: 'Annual Vacation Days', type: "number"},
+						 {field: 'start_date', displayName: 'Start Date', type: 'date', cellFilter: 'date:"yyyy-MM-dd"'},
+						 {field: 'end_date', displayName: 'End Date', type: 'date', cellFilter: 'date:"yyyy-MM-dd"'},
 						 {field: 'active', displayName: 'Active', type: 'boolean'}
 						];
 		$scope.gridOptions.data = $scope.payroll_data.employee_info;
@@ -304,7 +338,8 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 		}
 		$scope.gridOptions.columnDefs = [{field: 'code', displayName: 'Billing Code'},
 						 {field: 'internal', displayName: 'Internal Label'},
-						 {field: 'quickbooks', displayName: 'Quickbooks Label'}
+						 {field: 'quickbooks', displayName: 'Quickbooks Label'},
+						 {field: 'vacation', width: "8%", displayName: 'Vacation', type: 'boolean'}
 						];
 		$scope.gridOptions.data = $scope.payroll_data.quickbooks_mapping;
 	}
@@ -360,9 +395,9 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 					var empId = $scope.payroll_data.employee_info[idx].id;
 					var empPayableCutoff = $scope.payroll_data.employee_info[idx].project_payable_cutoff;
 					var earned_rate = $scope.payroll_data.employee_info[idx].annual_vacation_days / (365 * 5 / 7 - $scope.payroll_data.employee_info[idx].annual_vacation_days);
-					var earned_hours = Math.min($scope.laborHours() - $scope.loggedUnpaidVac(empId), $scope.payableLaborHours(empId, empPayableCutoff)) * earned_rate;
+					var earned_hours = Math.min($scope.laborHours(empId) - $scope.loggedUnpaidVac(empId), $scope.payableLaborHours(empId, empPayableCutoff)) * earned_rate;
 					$scope.payroll_data.vacation_history.push({id: empId, date: $scope.currenttimespanend, hours: earned_hours, comment: "Earned vacation", auto: true});
-					var hours_short = Math.max(Math.max($scope.laborHours() - $scope.payableLaborHours(empId, empPayableCutoff), 0)-$scope.loggedUnpaidVac(empId), 0);
+					var hours_short = Math.max(Math.max($scope.laborHours(empId) - $scope.payableLaborHours(empId, empPayableCutoff), 0)-$scope.loggedUnpaidVac(empId), 0);
 					var unlogged_vacation_hours = Math.min(hours_short, $scope.vacationTally(empId, $scope.beginningoftime, $scope.currenttimespanend));
 					if (unlogged_vacation_hours > 0.00000001)
 					{
@@ -395,9 +430,19 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
     }
     $scope.generateQuickbooks = function () {
 	var code_to_quickbooks = {};
+	var vacation_code = null;
+	var vacation_quickbooks = null;
 	for (var mapping in $scope.payroll_data.quickbooks_mapping)
 	{
-		code_to_quickbooks[$scope.payroll_data.quickbooks_mapping[mapping].code] = $scope.payroll_data.quickbooks_mapping[mapping].quickbooks ? $scope.payroll_data.quickbooks_mapping[mapping].quickbooks : "";
+		if (!$scope.payroll_data.quickbooks_mapping[mapping].vacation)
+		{
+			code_to_quickbooks[$scope.payroll_data.quickbooks_mapping[mapping].code] = $scope.payroll_data.quickbooks_mapping[mapping].quickbooks ? $scope.payroll_data.quickbooks_mapping[mapping].quickbooks : "";
+		}
+		else
+		{
+			vacation_code = $scope.payroll_data.quickbooks_mapping[mapping].code;
+			vacation_quickbooks = $scope.payroll_data.quickbooks_mapping[mapping].quickbooks;
+		}
 	}
 	var dashDateStr = $scope.currenttimespanend.getFullYear().toString() + "-" + pad($scope.currenttimespanend.getMonth()+1, 2) + "-" + pad($scope.currenttimespanend.getDate(), 2);
 	var unixDate = Math.floor($scope.currenttimespanend.getTime() / 1000);
@@ -419,8 +464,9 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 				if (col > 0 && col < $scope.users[empId][0].length - 1)
 				{
 					var code = $scope.users[empId][0][col].split('_')[$scope.users[empId][0][col].split('_').length-1];
-					if (code_to_quickbooks[code] != undefined)
+					if (code_to_quickbooks[code] != undefined || code == vacation_code)
 					{
+						// Skip over time that was explicitly logged as vacation.  Vacation is calculated.
 						if (code_to_quickbooks[code])
 						{
 							if (aggregate[code_to_quickbooks[code]])
@@ -448,7 +494,12 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 		}
 		for (var quickbooks in aggregate)
 		{
-			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+quickbooks+'\t'+qbName+'\t'+qbItem+'\t'+qbPitem+'\t'+$scope.formatTimeQuickBooks(aggregate[quickbooks])+'\t\t0\n';
+			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+quickbooks+'\t'+qbName+'\t'+qbItem+'\t'+qbPitem+'\t'+Math.floor(aggregate[quickbooks]).toString() + '.' + pad(Math.round((aggregate[quickbooks] - Math.floor(aggregate[quickbooks])) * 100), 2) +'\t\t0\n';
+		}
+		var amount_of_vacation = $scope.paidVacationHours(empId);
+		if (amount_of_vacation > 0.00001 && vacation_quickbooks)
+		{
+			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+vacation_quickbooks+'\t'+qbName+'\t'+qbItem+'\t'+qbPitem+'\t'+Math.floor(amount_of_vacation).toString() + '.' + pad(Math.round((amount_of_vacation - Math.floor(amount_of_vacation)) * 100), 2)+'\t\t0\n';
 		}
 	}
 	$scope.downloadFile("payroll.iif", quickbooksText);
