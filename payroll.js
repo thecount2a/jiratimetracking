@@ -421,13 +421,16 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 					var code = $scope.users[empId][0][col].split('_')[$scope.users[empId][0][col].split('_').length-1];
 					if (code_to_quickbooks[code] != undefined)
 					{
-						if (aggregate[code_to_quickbooks[code]])
+						if (code_to_quickbooks[code])
 						{
-							aggregate[code_to_quickbooks[code]] += Number($scope.users[empId][$scope.users[empId].length-1][col]);
-						}
-						else
-						{
-							aggregate[code_to_quickbooks[code]] = Number($scope.users[empId][$scope.users[empId].length-1][col]);
+							if (aggregate[code_to_quickbooks[code]])
+							{
+								aggregate[code_to_quickbooks[code]] += Number($scope.users[empId][$scope.users[empId].length-1][col]);
+							}
+							else
+							{
+								aggregate[code_to_quickbooks[code]] = Number($scope.users[empId][$scope.users[empId].length-1][col]);
+							}
 						}
 					}
 					else
