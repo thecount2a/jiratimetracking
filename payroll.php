@@ -124,7 +124,7 @@ else
 			    #buttonpair { overflow: hidden; }
 			    #buttonpair input { float:right }
 			    @media print { .no-print, .no-print * { display: none !important; } }
-			    @media print { div.hours { text-align: center; } table.hours { width: 60%; font-size: 75%; margin: 0 auto; } }
+			    @media print { div.hours { text-align: center; } table.hours { width: 60%; font-size: 70%; margin: 0 auto; } }
 			    .grid {width: 1400px;height: 600px;}
 			    div.sign { border-top: 1px solid black; }
 			</style>
@@ -191,7 +191,7 @@ else
 				<tr><th>Date \ Project #</th><th ng-repeat="col in users[employee.id][0]" ng-if="$index > 0">{{ col.split('_')[col.split('_').length-1] }}</th></tr>
 				<tr ng-repeat="row in users[employee.id] track by $index" ng-if="$index > 0 && !allitemszero(row)"><th>{{ row[0] }}</th><td class="hours" align="right" ng-repeat="col in row track by $index" ng-if="$index > 0"><div ng-if="col != '0'">{{ col }}h</div></td></tr>
 				<tr><td></td><td align="center" style="color: gray;"  ng-repeat="col in users[employee.id][0] track by $index" ng-if="$index > 0 && $index < users[employee.id][0].length-1">{{ lookupCode(col.split('_')[col.split('_').length-1], employee.project_payable_cutoff) }}</td><td></td></tr>
-				<tr><th align="center">Prorated</th><td align="center" style="color: gray;"  ng-repeat="col in users[employee.id][users[employee.id].length-1] track by $index" ng-if="$index > 0 && $index < users[employee.id][0].length-1">{{ Number(col) * Math.min(laborHours(employee.id) / payableLaborHours(employee.id, employee.project_payable_cutoff), 1) | number : 2 }}h</td><td></td></tr>
+				<tr><th align="center">Prorated Contract Billing</th><td align="center" style="color: gray;"  ng-repeat="col in users[employee.id][users[employee.id].length-1] track by $index" ng-if="$index > 0 && $index < users[employee.id][0].length-1">{{ Number(col) * Math.min(laborHours(employee.id) / payableLaborHours(employee.id, employee.project_payable_cutoff), 1) | number : 2 }}h</td><td></td></tr>
 				</table></div>
 				<br/>
 				<table cellpadding="1" class="hours">
