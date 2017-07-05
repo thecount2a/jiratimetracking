@@ -124,7 +124,7 @@ else
 			    #buttonpair { overflow: hidden; }
 			    #buttonpair input { float:right }
 			    @media print { .no-print, .no-print * { display: none !important; } }
-			    @media print { div.hours { text-align: center; } table.hours { width: 60%; font-size: 85%; margin: 0 auto; } }
+			    @media print { div.hours { text-align: center; } table.hours { width: 60%; font-size: 75%; margin: 0 auto; } }
 			    .grid {width: 1400px;height: 600px;}
 			    div.sign { border-top: 1px solid black; }
 			</style>
