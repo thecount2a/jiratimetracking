@@ -140,7 +140,11 @@ else
 		//echo "<br/>";
 		//echo $reportEndTime. " " . $endTime->format("Y/m/d H:i:s");
 		$items = $redis->zRangeByScore('issue.wl.s.index', (int) $dataStartTime, (int) $dataEndTime);
-		$itemObjs = $redis->mGet($items);
+		$itemObjs = array();
+		if (count($items) > 0)
+		{
+			$itemObjs = $redis->mGet($items);
+		}
 		$users = array();
 		$decodedObjs = array();
 		for ($i = 0; $i < count($itemObjs); $i++)
