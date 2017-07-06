@@ -1,5 +1,7 @@
 <?php
 
+date_default_timezone_set('America/New_York');
+
 $COOKIE_PREFIX           = "company";
 $HOSTED_DOMAIN           = "www.example.com";
 $JIRA_DOMAIN             = "example.atlassian.com";
