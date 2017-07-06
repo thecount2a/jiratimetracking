@@ -115,9 +115,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null)
 				{
 					if ($billingCodeFound === FALSE)
 					{
-						echo "<h2>Time was filed under issue with no billing code: ".$issueList[$i]."  This is a critical error, the database will not be updated until this issue has been fixed.</h2>";
-						$redLock->unlock($lock);
-						return;
+						$billingCodeFound = "UNKNOWN_0000";
 					}
 					$logTime = DateTime::createFromFormat('Y-m-d\TH:i:s.uO', $workLog["worklogs"][$j]["started"]);
 					$endLogTime = clone $logTime;
