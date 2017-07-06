@@ -393,7 +393,11 @@ else
 		$startTime->modify('+1 day')->setTime(0,0,0);
 	}
 	$items = $redis->zRangeByScore('issue.wl.s.index', (int) $startTime->format('U'), (int) $endTime->format('U'));
-	$itemObjs = $redis->mGet($items);
+	$itemObjs = array();
+	if (count($items) > 0)
+	{
+		$itemObjs = $redis->mGet($items);
+	}
 	$ledgerStr = "";
 	$issueReference = array();
 	$dataReference = array();
