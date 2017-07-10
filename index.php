@@ -249,6 +249,8 @@ else
 	}
 	echo "<a href=\"index.php?logout=true\">Logout</a><br/><br/></p>";
 
+	echo $EXTRA_BODY_HTML;
+
 	updateIssueDatabase($redis, $client, $obj);
 	$offset = 0;
 	// set recent task
