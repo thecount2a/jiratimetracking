@@ -9,7 +9,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null)
 {
 	$servers = array(array('127.0.0.1', 6379, 0.01));
 	// Max number of seconds we will wait before assuming that a previous update died and take over rebuilding the database
-	$maxSeconds = 120;
+	$maxSeconds = 600;
 	$redLock = new RedLock($servers, 500, 2*($maxSeconds + 2));
 	$lock = $redLock->lock('my_resource_name', $maxSeconds * 1000);
 	if ($lock)
@@ -25,6 +25,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null)
 			$url = $cert->jiraBaseUrl . 'rest/api/2/serverInfo';
 			$serverInfo = $jira->performRequest($url, "GET");
 			$serverTime = DateTime::createFromFormat('Y-m-d\TH:i:s.uO', $serverInfo["serverTime"]);
+			$serverTime->setTimezone(new DateTimeZone($GLOBALS['DEFAULT_TIMEZONE']));
 			$serverTime->sub(new DateInterval("PT".(((int)$serverTime->format('s')) + 60). "S"));
 			$serverTimeEarly = $serverTime->format("Y/m/d H:i");
 			
@@ -118,6 +119,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null)
 						$billingCodeFound = "UNKNOWN_0000";
 					}
 					$logTime = DateTime::createFromFormat('Y-m-d\TH:i:s.uO', $workLog["worklogs"][$j]["started"]);
+					$logTime->setTimezone(new DateTimeZone($GLOBALS['DEFAULT_TIMEZONE']));
 					$endLogTime = clone $logTime;
 					$endLogTime->add(new DateInterval("PT".((int)$workLog["worklogs"][$j]["timeSpentSeconds"]). "S"));
 					$timeclock = "i ".$logTime->format("Y/m/d H:i:s")." ".$accountName. "\no ".$endLogTime->format("Y/m/d H:i:s");

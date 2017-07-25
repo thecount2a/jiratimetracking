@@ -1,6 +1,7 @@
 <?php
 
-date_default_timezone_set('America/New_York');
+$DEFAULT_TIMEZONE        = "America/New_York";
+date_default_timezone_set($DEFAULT_TIMEZONE);
 
 $COOKIE_PREFIX           = "company";
 $HOSTED_DOMAIN           = "www.example.com";
