@@ -109,7 +109,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 				{
 					//$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueInfoRecursive["fields"]["parent"]["key"];
 					//$issueInfoRecursive = $jira->performRequest($url, "GET");
-					$issueInfoRecursive = array("key" => $issueInfoRecursive["fields"]["parent"]["key"], "fields" => array( "summary" => $redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".summary"), "labels" => $redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".labels"), "customfield_10006" => $redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".epic")));
+					$issueInfoRecursive = array("key" => $issueInfoRecursive["fields"]["parent"]["key"], "fields" => array( "summary" => $redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".summary"), "labels" => ($redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".labels") ? json_decode($redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".labels")) : array()), "customfield_10006" => $redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".epic")));
 					$accountName = $issueInfoRecursive["fields"]["summary"] . ":" . $accountName;
 					$billingCodes = array_merge($billingCodes, $issueInfoRecursive["fields"]["labels"]);
 					$redis->sadd('issue.'.$issueInfoRecursive["key"].'.children', $issueList[$i]);
@@ -118,7 +118,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 				{
 					//$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueInfoRecursive["fields"]["customfield_10006"];
 					//$issueInfoRecursive = $jira->performRequest($url, "GET");
-					$issueInfoRecursive = array("key" => $issueInfoRecursive["fields"]["customfield_10006"], "fields" => array( "summary" => $redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".summary"), "labels" => $redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".labels"), "customfield_10006" => $redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".epic")));
+					$issueInfoRecursive = array("key" => $issueInfoRecursive["fields"]["customfield_10006"], "fields" => array( "summary" => $redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".summary"), "labels" => ($redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".labels") ? json_decode($redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".labels")) : array()), "customfield_10006" => $redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".epic")));
 					$accountName = $issueInfoRecursive["fields"]["summary"] . ":" . $accountName;
 					$billingCodes = array_merge($billingCodes, $issueInfoRecursive["fields"]["labels"]);
 					$redis->sadd('issue.'.$issueInfoRecursive["key"].'.children', $issueList[$i]);
