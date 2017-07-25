@@ -80,58 +80,58 @@ else
 		}
 
 		// Generate timecard
-		$startTime = new DateTime("now", new DateTimeZone("America/New_York"));
-		$endTime = new DateTime("now", new DateTimeZone("America/New_York"));
+		$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
+		$endTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 		$startTime->modify('first day of last month')->setTime(0,0,0);
 		$dataStartTime = $startTime->format('U');
 		$dataEndTime = $endTime->format('U');
 		if ($_GET["period"] == "This Week")
 		{
-			$startTime = new DateTime("now", new DateTimeZone("America/New_York"));
+			$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$startTime->modify('Last Sunday')->setTime(0,0,0);
 			$startTime->modify('+1 day')->setTime(0,0,0);
 		}
 		else if ($_GET["period"] == "Last Week")
 		{
-			$startTime = new DateTime("now", new DateTimeZone("America/New_York"));
+			$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$startTime->modify('Last Sunday')->setTime(0,0,0);
 			$startTime->modify('Last Sunday')->setTime(0,0,0);
 			$startTime->modify('+1 day')->setTime(0,0,0);
-			$endTime = new DateTime("now", new DateTimeZone("America/New_York"));
+			$endTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$endTime->modify('Last Sunday')->setTime(0,0,0);
 			$endTime->modify('+1 day')->setTime(0,0,0);
 		}
 		else if ($_GET["period"] == "This Month")
 		{
-			$startTime = new DateTime("now", new DateTimeZone("America/New_York"));
+			$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$startTime->modify('first day of this month')->setTime(0,0,0);
 		}
 		else if ($_GET["period"] == "Last Month")
 		{
-			$startTime = new DateTime("now", new DateTimeZone("America/New_York"));
+			$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$startTime->modify('first day of last month')->setTime(0,0,0);
-			$endTime = new DateTime("now", new DateTimeZone("America/New_York"));
+			$endTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$endTime->modify('first day of this month')->setTime(0,0,0);
 		}
 		else if ($_GET["period"] == "Year to Date")
 		{
-			$startTime = new DateTime("now", new DateTimeZone("America/New_York"));
+			$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$startTime->setDate($startTime->format('Y'), 1, 1)->setTime(0,0,0);
 		}
 		else if ($_GET["period"] == "Last Year")
 		{
-			$startTime = new DateTime("now", new DateTimeZone("America/New_York"));
+			$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$startTime->setDate($startTime->format('Y'), 1, 1)->setTime(0,0,0);
 			$startTime->modify('-1 year');
-			$endTime = new DateTime("now", new DateTimeZone("America/New_York"));
+			$endTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$endTime->setDate($endTime->format('Y'), 1, 1)->setTime(0,0,0);
 		}
 		else if (strpos($_GET["period"], ' - ') !== FALSE)
 		{
 			$parts = explode(' - ', $_GET["period"]);
-			$startTime = new DateTime($parts[0], new DateTimeZone("America/New_York"));
+			$startTime = new DateTime($parts[0], new DateTimeZone($DEFAULT_TIMEZONE));
 			$startTime->setTime(0,0,0);
-			$endTime = new DateTime($parts[1], new DateTimeZone("America/New_York"));
+			$endTime = new DateTime($parts[1], new DateTimeZone($DEFAULT_TIMEZONE));
 			$endTime->setTime(23,59,59);
 		}
 		$reportStartTime = (int) $startTime->format('U');
