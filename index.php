@@ -5,6 +5,17 @@ require_once 'RedLock.php';
 require_once 'reportlib.php';
 require_once 'AuthJiraCert.php';
 
+register_shutdown_function( "fatal_handler" );
+
+function fatal_handler() {
+	if ($GLOBALS['redLock'])
+	{
+		$GLOBALS['redLock']->unlock($GLOBALS['lock']);
+	}
+}
+$redLock = null;
+$lock = null;
+
 function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild = false)
 {
 	$servers = array(array('127.0.0.1', 6379, 0.01));
@@ -15,177 +26,184 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 		// Assume a full rebuild could take half an hour... not likely but it's hard to tell how fast Jira servers will respond.
 		$maxSeconds = 1800;
 	}
-	$redLock = new RedLock($servers, 500, 2*($maxSeconds + 2));
-	$lock = $redLock->lock('my_resource_name', $maxSeconds * 1000);
-	if ($lock)
+	$GLOBALS['redLock'] = new RedLock($servers, 500, 2*($maxSeconds + 2));
+	$GLOBALS['lock'] = $GLOBALS['redLock']->lock('my_resource_name', $maxSeconds * 1000);
+	if ($GLOBALS['lock'])
 	{
-		$issueList = array();
-		if ($issue === null)
+		try
 		{
-			$lastUpdate = 0;
-			if (!$fullRebuild && $redis->exists("lastIssueUpdate"))
+			$issueList = array();
+			if ($issue === null)
 			{
-				$lastUpdate = $redis->get("lastIssueUpdate");
+				$lastUpdate = 0;
+				if (!$fullRebuild && $redis->exists("lastIssueUpdate"))
+				{
+					$lastUpdate = $redis->get("lastIssueUpdate");
+				}
+				$url = $cert->jiraBaseUrl . 'rest/api/2/serverInfo';
+				$serverInfo = $jira->performRequest($url, "GET");
+				$serverTime = DateTime::createFromFormat('Y-m-d\TH:i:s.uO', $serverInfo["serverTime"]);
+				$serverTime->setTimezone(new DateTimeZone($GLOBALS['DEFAULT_TIMEZONE']));
+				$serverTime->sub(new DateInterval("PT".(((int)$serverTime->format('s')) + 60). "S"));
+				$serverTimeEarly = $serverTime->format("Y/m/d H:i");
+				
+				$queryDate = date("Y/m/d H:i", $lastUpdate);
+				$url = $cert->jiraBaseUrl . 'rest/api/2/search';
+				$issues = $jira->performRequest($url, array("jql" => 'updated >= \''.$queryDate.'\' and updated < \''.$serverTimeEarly.'\' order by updated ASC', "maxResults" => 1000), "GET");
+				for ($i = 0; $i < count($issues["issues"]); $i++)
+				{
+					$issueList[] = $issues["issues"][$i]["key"];
+				}
 			}
-			$url = $cert->jiraBaseUrl . 'rest/api/2/serverInfo';
-			$serverInfo = $jira->performRequest($url, "GET");
-			$serverTime = DateTime::createFromFormat('Y-m-d\TH:i:s.uO', $serverInfo["serverTime"]);
-			$serverTime->setTimezone(new DateTimeZone($GLOBALS['DEFAULT_TIMEZONE']));
-			$serverTime->sub(new DateInterval("PT".(((int)$serverTime->format('s')) + 60). "S"));
-			$serverTimeEarly = $serverTime->format("Y/m/d H:i");
-			
-			$queryDate = date("Y/m/d H:i", $lastUpdate);
-			$url = $cert->jiraBaseUrl . 'rest/api/2/search';
-			$issues = $jira->performRequest($url, array("jql" => 'updated >= \''.$queryDate.'\' and updated < \''.$serverTimeEarly.'\' order by updated ASC', "maxResults" => 1000), "GET");
-			for ($i = 0; $i < count($issues["issues"]); $i++)
+			else
 			{
-				$issueList[] = $issues["issues"][$i]["key"];
+				$issueList = array($issue);
 			}
-		}
-		else
-		{
-			$issueList = array($issue);
-		}
-		for ($i = 0; $i < count($issueList); $i++)
-		{
-			$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueList[$i];
-			$issueInfo = $jira->performRequest($url, "GET");
-			if ($issueInfo["key"] && $issueInfo["key"] == $issueList[$i])
+			for ($i = 0; $i < count($issueList); $i++)
 			{
-				$rebuildChildren = false;
-				if ($redis->get('issue.'.$issueList[$i].'.summary') != $issueInfo["fields"]["summary"])
+				$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueList[$i];
+				$issueInfo = $jira->performRequest($url, "GET");
+				if ($issueInfo["key"] && $issueInfo["key"] == $issueList[$i])
 				{
-					$rebuildChildren = true;
-				}
-				$redis->set('issue.'.$issueList[$i].'.summary', $issueInfo["fields"]["summary"]);
-				if ($redis->get('issue.'.$issueList[$i].'.labels') != json_encode($issueInfo["fields"]["labels"]))
-				{
-					$rebuildChildren = true;
-				}
-				$redis->set('issue.'.$issueList[$i].'.labels', json_encode($issueInfo["fields"]["labels"]));
-				if ($redis->get('issue.'.$issueList[$i].'.epic') != $issueInfo["fields"]["customfield_10006"])
-				{
-					$rebuildChildren = true;
-				}
-				$redis->set('issue.'.$issueList[$i].'.epic', $issueInfo["fields"]["customfield_10006"]);
-				if (!$fullRebuild && $rebuildChildren)
-				{
-					$additionalIssues = array();
-					$children = $redis->smembers('issue.'.$issueList[$i].'.children');
-					for ($j = 0; $j < count($children); $j++)
+					$rebuildChildren = false;
+					if ($redis->get('issue.'.$issueList[$i].'.summary') != $issueInfo["fields"]["summary"])
 					{
-						$additionalIssues[] = $children[$j];
-						$grandchildren = $redis->smembers('issue.'.$children[$j].'.children');
-						for ($k = 0; $k < count($grandchildren); $k++)
+						$rebuildChildren = true;
+					}
+					$redis->set('issue.'.$issueList[$i].'.summary', $issueInfo["fields"]["summary"]);
+					if ($redis->get('issue.'.$issueList[$i].'.labels') != json_encode($issueInfo["fields"]["labels"]))
+					{
+						$rebuildChildren = true;
+					}
+					$redis->set('issue.'.$issueList[$i].'.labels', json_encode($issueInfo["fields"]["labels"]));
+					if ($redis->get('issue.'.$issueList[$i].'.epic') != $issueInfo["fields"]["customfield_10006"])
+					{
+						$rebuildChildren = true;
+					}
+					$redis->set('issue.'.$issueList[$i].'.epic', $issueInfo["fields"]["customfield_10006"]);
+					if (!$fullRebuild && $rebuildChildren)
+					{
+						$additionalIssues = array();
+						$children = $redis->smembers('issue.'.$issueList[$i].'.children');
+						for ($j = 0; $j < count($children); $j++)
 						{
-							$additionalIssues[] = $grandchildren[$k];
+							$additionalIssues[] = $children[$j];
+							$grandchildren = $redis->smembers('issue.'.$children[$j].'.children');
+							for ($k = 0; $k < count($grandchildren); $k++)
+							{
+								$additionalIssues[] = $grandchildren[$k];
+							}
+						}
+						$issueList = array_merge($issueList, $additionalIssues);
+					}
+					$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueList[$i]. '/worklog';
+					$workLog = $jira->performRequest($url, "GET");
+					if ($redis->exists('issue.'.$issueList[$i].'.wl.count'))
+					{
+						$numwl = $redis->get('issue.'.$issueList[$i].'.wl.count');
+						$delkeys = array();
+						for ($j = 0; $j < $numwl; $j++)
+						{
+							$wlKey = 'issue.'.$issueList[$i].'.wl.'.$j;
+							$redis->zRem('issue.wl.s.index', $wlKey);
+							$delkeys[] = $wlKey;
+						}
+						if (count($delkeys) > 0)
+						{
+							$redis->del($delkeys);
 						}
 					}
-					$issueList = array_merge($issueList, $additionalIssues);
-				}
-				$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueList[$i]. '/worklog';
-				$workLog = $jira->performRequest($url, "GET");
-				if ($redis->exists('issue.'.$issueList[$i].'.wl.count'))
-				{
-					$numwl = $redis->get('issue.'.$issueList[$i].'.wl.count');
-					$delkeys = array();
-					for ($j = 0; $j < $numwl; $j++)
+					$accountName = $issueInfo["fields"]["summary"];
+					$billingCodes = array();
+					// Make copy because we plan to climb the tree and reassign the "issue"
+					$issueInfoRecursive = $issueInfo;
+					$billingCodes = $issueInfoRecursive["fields"]["labels"];
+					if ($issueInfoRecursive["fields"]["parent"])
 					{
+						//$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueInfoRecursive["fields"]["parent"]["key"];
+						//$issueInfoRecursive = $jira->performRequest($url, "GET");
+						$issueInfoRecursive = array("key" => $issueInfoRecursive["fields"]["parent"]["key"], "fields" => array( "summary" => $redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".summary"), "labels" => ($redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".labels") ? json_decode($redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".labels")) : array()), "customfield_10006" => $redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".epic")));
+						$accountName = $issueInfoRecursive["fields"]["summary"] . ":" . $accountName;
+						$billingCodes = array_merge($billingCodes, $issueInfoRecursive["fields"]["labels"]);
+						$redis->sadd('issue.'.$issueInfoRecursive["key"].'.children', $issueList[$i]);
+					}
+					if ($issueInfoRecursive["fields"]["customfield_10006"])
+					{
+						//$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueInfoRecursive["fields"]["customfield_10006"];
+						//$issueInfoRecursive = $jira->performRequest($url, "GET");
+						$issueInfoRecursive = array("key" => $issueInfoRecursive["fields"]["customfield_10006"], "fields" => array( "summary" => $redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".summary"), "labels" => ($redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".labels") ? json_decode($redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".labels")) : array()), "customfield_10006" => $redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".epic")));
+						$accountName = $issueInfoRecursive["fields"]["summary"] . ":" . $accountName;
+						$billingCodes = array_merge($billingCodes, $issueInfoRecursive["fields"]["labels"]);
+						$redis->sadd('issue.'.$issueInfoRecursive["key"].'.children', $issueList[$i]);
+					}
+					// Look for billing codes in specific format LETTERS_numbers
+					$billingCodeFound = FALSE;
+					for ($k = 0; $k < count($billingCodes); $k++)
+					{
+						if (strpos($billingCodes[$k], "_") !== FALSE)
+						{
+							$parts = explode("_", $billingCodes[$k]);
+							if (is_numeric($parts[1]))
+							{
+								$billingCodeFound = $billingCodes[$k];
+								break;
+							}
+						}
+					}
+					for ($j = 0; $j < count($workLog["worklogs"]); $j++)
+					{
+						if ($billingCodeFound === FALSE)
+						{
+							$billingCodeFound = "UNKNOWN_0000";
+						}
+						$logTime = DateTime::createFromFormat('Y-m-d\TH:i:s.uO', $workLog["worklogs"][$j]["started"]);
+						$logTime->setTimezone(new DateTimeZone($GLOBALS['DEFAULT_TIMEZONE']));
+						$endLogTime = clone $logTime;
+						$endLogTime->add(new DateInterval("PT".((int)$workLog["worklogs"][$j]["timeSpentSeconds"]). "S"));
+						$timeclock = "i ".$logTime->format("Y/m/d H:i:s")." ".$accountName. "\no ".$endLogTime->format("Y/m/d H:i:s");
+						$ledgerreturn = runHledger("-f - print", $timeclock, $ledger);
+						$richerLedger = array();
+						$transactions = explode("\n\n", $ledger);
+						// Trim off the last, always empty transaction
+						for ($k = 0; $k < count($transactions)-1; $k++)
+						{
+							$newLines = array();
+							$lines = explode("\n", $transactions[$k]);
+							$commentlines = explode("\n", $workLog["worklogs"][$j]["comment"]);
+							$newLines[] = $lines[0]." ".$commentlines[0];
+							$newLines[] = "    ; user:".$workLog["worklogs"][$j]["author"]["key"];
+							$newLines[] = "    ; billing:".$billingCodeFound;
+							$newLines = array_merge($newLines, array_slice($lines, 1));
+							$richerLedger[] = implode("\n", $newLines);
+						}
+						
+						$wlEntry = array(
+							"a" => $workLog["worklogs"][$j]["author"]["key"],
+							"s" => $logTime->format("U"),
+							"d" => $workLog["worklogs"][$j]["timeSpentSeconds"],
+							"c" => $workLog["worklogs"][$j]["comment"],
+							"l" => implode("\n\n", $richerLedger)
+						);
+						
 						$wlKey = 'issue.'.$issueList[$i].'.wl.'.$j;
-						$redis->zRem('issue.wl.s.index', $wlKey);
-						$delkeys[] = $wlKey;
+						$redis->zAdd('issue.wl.s.index', $wlEntry["s"], $wlKey);
+						$redis->set($wlKey, json_encode($wlEntry));
 					}
-					if (count($delkeys) > 0)
-					{
-						$redis->del($delkeys);
-					}
+					$redis->set('issue.'.$issueList[$i].'.wl.count', count($workLog["worklogs"]));
 				}
-				$accountName = $issueInfo["fields"]["summary"];
-				$billingCodes = array();
-				// Make copy because we plan to climb the tree and reassign the "issue"
-				$issueInfoRecursive = $issueInfo;
-				$billingCodes = $issueInfoRecursive["fields"]["labels"];
-				if ($issueInfoRecursive["fields"]["parent"])
-				{
-					//$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueInfoRecursive["fields"]["parent"]["key"];
-					//$issueInfoRecursive = $jira->performRequest($url, "GET");
-					$issueInfoRecursive = array("key" => $issueInfoRecursive["fields"]["parent"]["key"], "fields" => array( "summary" => $redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".summary"), "labels" => ($redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".labels") ? json_decode($redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".labels")) : array()), "customfield_10006" => $redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".epic")));
-					$accountName = $issueInfoRecursive["fields"]["summary"] . ":" . $accountName;
-					$billingCodes = array_merge($billingCodes, $issueInfoRecursive["fields"]["labels"]);
-					$redis->sadd('issue.'.$issueInfoRecursive["key"].'.children', $issueList[$i]);
-				}
-				if ($issueInfoRecursive["fields"]["customfield_10006"])
-				{
-					//$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueInfoRecursive["fields"]["customfield_10006"];
-					//$issueInfoRecursive = $jira->performRequest($url, "GET");
-					$issueInfoRecursive = array("key" => $issueInfoRecursive["fields"]["customfield_10006"], "fields" => array( "summary" => $redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".summary"), "labels" => ($redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".labels") ? json_decode($redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".labels")) : array()), "customfield_10006" => $redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".epic")));
-					$accountName = $issueInfoRecursive["fields"]["summary"] . ":" . $accountName;
-					$billingCodes = array_merge($billingCodes, $issueInfoRecursive["fields"]["labels"]);
-					$redis->sadd('issue.'.$issueInfoRecursive["key"].'.children', $issueList[$i]);
-				}
-				// Look for billing codes in specific format LETTERS_numbers
-				$billingCodeFound = FALSE;
-				for ($k = 0; $k < count($billingCodes); $k++)
-				{
-					if (strpos($billingCodes[$k], "_") !== FALSE)
-					{
-						$parts = explode("_", $billingCodes[$k]);
-						if (is_numeric($parts[1]))
-						{
-							$billingCodeFound = $billingCodes[$k];
-							break;
-						}
-					}
-				}
-				for ($j = 0; $j < count($workLog["worklogs"]); $j++)
-				{
-					if ($billingCodeFound === FALSE)
-					{
-						$billingCodeFound = "UNKNOWN_0000";
-					}
-					$logTime = DateTime::createFromFormat('Y-m-d\TH:i:s.uO', $workLog["worklogs"][$j]["started"]);
-					$logTime->setTimezone(new DateTimeZone($GLOBALS['DEFAULT_TIMEZONE']));
-					$endLogTime = clone $logTime;
-					$endLogTime->add(new DateInterval("PT".((int)$workLog["worklogs"][$j]["timeSpentSeconds"]). "S"));
-					$timeclock = "i ".$logTime->format("Y/m/d H:i:s")." ".$accountName. "\no ".$endLogTime->format("Y/m/d H:i:s");
-					$ledgerreturn = runHledger("-f - print", $timeclock, $ledger);
-					$richerLedger = array();
-					$transactions = explode("\n\n", $ledger);
-					// Trim off the last, always empty transaction
-					for ($k = 0; $k < count($transactions)-1; $k++)
-					{
-						$newLines = array();
-						$lines = explode("\n", $transactions[$k]);
-						$commentlines = explode("\n", $workLog["worklogs"][$j]["comment"]);
-						$newLines[] = $lines[0]." ".$commentlines[0];
-						$newLines[] = "    ; user:".$workLog["worklogs"][$j]["author"]["key"];
-						$newLines[] = "    ; billing:".$billingCodeFound;
-						$newLines = array_merge($newLines, array_slice($lines, 1));
-						$richerLedger[] = implode("\n", $newLines);
-					}
-					
-					$wlEntry = array(
-						"a" => $workLog["worklogs"][$j]["author"]["key"],
-						"s" => $logTime->format("U"),
-						"d" => $workLog["worklogs"][$j]["timeSpentSeconds"],
-						"c" => $workLog["worklogs"][$j]["comment"],
-						"l" => implode("\n\n", $richerLedger)
-					);
-					
-					$wlKey = 'issue.'.$issueList[$i].'.wl.'.$j;
-					$redis->zAdd('issue.wl.s.index', $wlEntry["s"], $wlKey);
-					$redis->set($wlKey, json_encode($wlEntry));
-				}
-				$redis->set('issue.'.$issueList[$i].'.wl.count', count($workLog["worklogs"]));
 			}
+			if ($issue === null)
+			{
+				$redis->set("lastIssueUpdate", $serverTime->format('U'));
+			}
+			$GLOBALS['redLock']->unlock($GLOBALS['lock']);
 		}
-		if ($issue === null)
+		catch (Exception $e)
 		{
-			$redis->set("lastIssueUpdate", $serverTime->format('U'));
-			//$redis->set("lastIssueUpdate", 0);
+			// Limit damage of exception
+			$GLOBALS['redLock']->unlock($GLOBALS['lock']);
+			throw $e;
 		}
-
-		$redLock->unlock($lock);
 	}
 	else
 	{
