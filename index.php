@@ -59,6 +59,10 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 			{
 				$issueList = array($issue);
 			}
+			if ($fullRebuild)
+			{
+				$redis->del('issue.wl.s.index');
+			}
 			for ($i = 0; $i < count($issueList); $i++)
 			{
 				$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueList[$i];
