@@ -457,15 +457,38 @@ else
 		echo "<h3>Current Report:</h3><form action=\"".$_SERVER['REQUEST_URI']."\" method=\"GET\"><select name=\"report\" onChange=\"this.form.submit();\">";
 		echo "<option value=\"week\"".($_GET["report"] == "week"?" selected=\"selected\"":"").">My Weekly Summary</option>";
 		echo "<option value=\"month\"".($_GET["report"] == "month"?" selected=\"selected\"":"").">My Monthly Summary</option>";
+		echo "<option value=\"lastweek\"".($_GET["report"] == "lastweek"?" selected=\"selected\"":"").">My Summary for Last Week</option>";
+		echo "<option value=\"lastmonth\"".($_GET["report"] == "lastmonth"?" selected=\"selected\"":"").">My Summary for Last Month</option>";
 		echo "</select></form>";
 		// Generate timecard
 		$endTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 		$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 		$period = "week";
+		$which = "this";
 		if ($_GET["report"] == "month")
 		{
 			$period = "month";
 			$startTime->modify('first day of this month')->setTime(0,0,0);
+		}
+		else if ($_GET["report"] == "lastmonth")
+		{
+			$period = "month";
+			$which = "last";
+			$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
+			$startTime->modify('first day of last month')->setTime(0,0,0);
+			$endTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
+			$endTime->modify('first day of this month')->setTime(0,0,0);
+		}
+		else if ($_GET["report"] == "lastweek")
+		{
+			$which = "last";
+			$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
+			$startTime->modify('Last Sunday')->setTime(0,0,0);
+			$startTime->modify('Last Sunday')->setTime(0,0,0);
+			$startTime->modify('+1 day')->setTime(0,0,0);
+			$endTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
+			$endTime->modify('Last Sunday')->setTime(0,0,0);
+			$endTime->modify('+1 day')->setTime(0,0,0);
 		}
 		else
 		{
@@ -507,14 +530,14 @@ else
 			$ledgerreturn = runHledger("-f - bal -W -O csv -T", $ledgerStr, $ledgerCsv);
 		}
 		$result = generateLedgerTable($ledgerCsv);
-		echo "<h3>Summary for this ".$period.":</h3>".$result->output;
+		echo "<h3>Summary for ".$which." ".$period.":</h3>".$result->output;
 
 		$ledgerreturn = runHledger("-f - bal --pivot billing -D -T -O csv", $ledgerStr, $ledgerCsv);
 		$result = generateLedgerTable($ledgerCsv, true);
-		echo "<h3>Billing for this ".$period.":</h3>".$result->output;
+		echo "<h3>Billing for ".$which." ".$period.":</h3>".$result->output;
 
 		$ledgerreturn = runHledger("-f - reg -O csv", $ledgerStr, $ledgerCsv);
 		$result = generateLedgerTable($ledgerCsv, false, $issueReference, $dataReference);
-		echo "<h3>Individual timecard entries this ".$period.":</h3>".$result->output;
+		echo "<h3>Individual timecard entries ".$which." ".$period.":</h3>".$result->output;
 	}
 }

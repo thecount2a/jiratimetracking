@@ -186,6 +186,11 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 	var dateobj = new Date(datestr);
 	return pad(dateobj.getMonth()+1, 2) + "/" + pad(dateobj.getDate(), 2) + "/" + dateobj.getFullYear();
     }
+    $scope.getCurrentMonth = function () {
+	var monthNames = ["January", "February", "March", "April", "May", "June","July", "August", "September", "October", "November", "December"];
+        var curDate = angular.copy($scope.currenttimespanstart);
+	return monthNames[curDate.getMonth()] + ' ' + curDate.getFullYear().toString();
+    }
     $scope.laborHours = function (empId, ignoreStartEnd = false) {
         var count = 0;
         var curDate = angular.copy($scope.currenttimespanstart);

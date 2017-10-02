@@ -139,7 +139,7 @@ else
 		//echo $reportStartTime. " " . $startTime->format("Y/m/d H:i:s");
 		//echo "<br/>";
 		//echo $reportEndTime. " " . $endTime->format("Y/m/d H:i:s");
-		$items = $redis->zRangeByScore('issue.wl.s.index', (int) $dataStartTime, (int) $dataEndTime);
+		$items = $redis->zRangeByScore('issue.wl.s.index', (int) $reportStartTime, (int) $reportEndTime);
 		$itemObjs = array();
 		if (count($items) > 0)
 		{

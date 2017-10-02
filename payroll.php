@@ -175,7 +175,7 @@ else
 			  <input type="button" value="Delete" ng-click="deleteRow();">
 			</div>
 			</div>
-			<div ng-repeat="employee in payroll_data.employee_info" ng-if="employee.active">
+			<div ng-repeat="employee in payroll_data.employee_info | orderBy:'id'" ng-if="employee.active">
 				<table cellpadding="3"><tr><td>
 				<?php echo $COMPANY_PAYROLL_HEADER ?>
 				</td><td>
@@ -185,7 +185,7 @@ else
 				<tr><th align="right">Monthly Benefits:</td><td>{{ employee.monthly_benefits | currency }}</td></tr>
 				<tr><th align="right">Vacation Rate:</td><td>{{ employee.annual_vacation_days / (365 * 5 / 7 - employee.annual_vacation_days) | number : 6 }}</td></tr>
 				</table>
-				</td></tr></table>
+				</td><td valign="top">{{ getCurrentMonth() }}</td></tr></table>
 				<br/>
 				<div class="hours"><table cellpadding="2" border="1" class="niceborder hours">
 				<tr><th>Date \ Project #</th><th ng-repeat="col in users[employee.id][0]" ng-if="$index > 0">{{ col.split('_')[col.split('_').length-1] }}</th></tr>
