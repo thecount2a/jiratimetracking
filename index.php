@@ -469,6 +469,7 @@ else
 		{
 			$period = "month";
 			$startTime->modify('first day of this month')->setTime(0,0,0);
+			$endTime->modify('last day of this month')->setTime(23,59,59);
 		}
 		else if ($_GET["report"] == "lastmonth")
 		{
@@ -494,6 +495,8 @@ else
 		{
 			$startTime->modify('Last Sunday')->setTime(0,0,0);
 			$startTime->modify('+1 day')->setTime(0,0,0);
+			$endTime->modify('Next Sunday')->setTime(0,0,0);
+			$endTime->modify('+1 day')->setTime(0,0,0);
 		}
 		$items = $redis->zRangeByScore('issue.wl.s.index', (int) $startTime->format('U'), (int) $endTime->format('U'));
 		$itemObjs = array();

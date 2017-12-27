@@ -90,6 +90,9 @@ else
 			$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$startTime->modify('Last Sunday')->setTime(0,0,0);
 			$startTime->modify('+1 day')->setTime(0,0,0);
+			$endTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
+			$endTime->modify('Next Sunday')->setTime(0,0,0);
+			$endTime->modify('+1 day')->setTime(0,0,0);
 		}
 		else if ($_GET["period"] == "Last Week")
 		{
@@ -105,6 +108,8 @@ else
 		{
 			$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$startTime->modify('first day of this month')->setTime(0,0,0);
+			$endTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
+			$endTime->modify('last day of this month')->setTime(23,59,59);
 		}
 		else if ($_GET["period"] == "Last Month")
 		{
