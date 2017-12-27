@@ -380,7 +380,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 	      	{
 			$scope.payroll_data.timespans = [];
 	      	}
-	      	if (new Date() > $scope.currenttimespanend && ($scope.payroll_data.timespans.indexOf($scope.currenttimespan) < 0 || force))
+	      	if ((new Date() > $scope.currenttimespanend && $scope.payroll_data.timespans.indexOf($scope.currenttimespan) < 0) || force)
 	      	{
 			var new_vacation = [];
 			// Get rid of already computed vacation numbers for this period
