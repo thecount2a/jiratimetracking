@@ -85,6 +85,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 			{
 				$redis->del('issue.wl.s.index');
 			}
+			$userDailyTotals = array();
 			for ($i = 0; $i < count($issueList); $i++)
 			{
 				$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueList[$i];
@@ -190,6 +191,15 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 						$ledgerreturn = runHledger("-f - print", $timeclock, $ledger);
 						$richerLedger = array();
 						$transactions = explode("\n\n", $ledger);
+						$dailyTotalKey = "dailytotal.".$logTime->format("Y.m.d").".".$workLog["worklogs"][$j]["author"]["key"];
+						if (array_key_exists($dailyTotalKey, $userDailyTotals))
+						{
+							$userDailyTotals[$dailyTotalKey] += $workLog["worklogs"][$j]["timeSpentSeconds"];
+						}
+						else
+						{
+							$userDailyTotals[$dailyTotalKey] = $workLog["worklogs"][$j]["timeSpentSeconds"];
+						}
 						// Trim off the last, always empty transaction
 						for ($k = 0; $k < count($transactions)-1; $k++)
 						{
@@ -216,6 +226,17 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 						$redis->set($wlKey, json_encode($wlEntry));
 					}
 					$redis->set('issue.'.$issueList[$i].'.wl.count', count($workLog["worklogs"]));
+				}
+			}
+			foreach($userDailyTotals as $dtkey => $dtvalue)
+			{
+				if ($fullRebuild)
+				{
+					$redis->set($dtkey, $dtvalue);
+				}
+				else
+				{
+					$redis->incrBy($dtkey, $dtvalue);
 				}
 			}
 			if ($issue === null)
