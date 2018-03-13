@@ -49,10 +49,32 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 				
 				$queryDate = date("Y/m/d H:i", $lastUpdate);
 				$url = $cert->jiraBaseUrl . 'rest/api/2/search';
-				$issues = $jira->performRequest($url, array("jql" => 'updated >= \''.$queryDate.'\' and updated < \''.$serverTimeEarly.'\' order by updated ASC', "maxResults" => 1000), "GET");
-				for ($i = 0; $i < count($issues["issues"]); $i++)
+				$startAt = 0;
+				$issueCount = 0;
+				$maxResults = 1000;
+				while($startAt == 0 || count($issueList) < $issueCount)
 				{
-					$issueList[] = $issues["issues"][$i]["key"];
+					$issues = $jira->performRequest($url, array("jql" => 'updated >= \''.$queryDate.'\' and updated < \''.$serverTimeEarly.'\' order by updated ASC', "maxResults" => $maxResults, "startAt" => $startAt), "GET");
+					if ($issues["maxResults"] != $maxResults)
+					{
+						$maxResults = $issues["maxResults"];
+					}
+					if ($issues["total"] != $issueCount)
+					{
+						$issueCount = $issues["total"];
+					}
+					$startAt += $maxResults;
+
+					//print_r($issues);
+					for ($i = 0; $i < count($issues["issues"]); $i++)
+					{
+						$issueList[] = $issues["issues"][$i]["key"];
+					}
+					// Should never happen but just to prevent infinite loops
+					if (empty($issues["issues"]))
+					{
+						break;
+					}
 				}
 			}
 			else
