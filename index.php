@@ -84,6 +84,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 			if ($fullRebuild)
 			{
 				$redis->del('issue.wl.s.index');
+				$redis->del('issue.wl.seen');
 			}
 			$userDailyTotals = array();
 			for ($i = 0; $i < count($issueList); $i++)
@@ -192,13 +193,16 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 						$richerLedger = array();
 						$transactions = explode("\n\n", $ledger);
 						$dailyTotalKey = "dailytotal.".$logTime->format("Y.m.d").".".$workLog["worklogs"][$j]["author"]["key"];
-						if (array_key_exists($dailyTotalKey, $userDailyTotals))
+						if ($fullRebuild || !$redis->sIsMember('issue.wl.seen', $issueList[$i].".".$logTime->format("U")))
 						{
-							$userDailyTotals[$dailyTotalKey] += $workLog["worklogs"][$j]["timeSpentSeconds"];
-						}
-						else
-						{
-							$userDailyTotals[$dailyTotalKey] = $workLog["worklogs"][$j]["timeSpentSeconds"];
+							if (array_key_exists($dailyTotalKey, $userDailyTotals))
+							{
+								$userDailyTotals[$dailyTotalKey] += $workLog["worklogs"][$j]["timeSpentSeconds"];
+							}
+							else
+							{
+								$userDailyTotals[$dailyTotalKey] = $workLog["worklogs"][$j]["timeSpentSeconds"];
+							}
 						}
 						// Trim off the last, always empty transaction
 						for ($k = 0; $k < count($transactions)-1; $k++)
@@ -223,6 +227,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 						
 						$wlKey = 'issue.'.$issueList[$i].'.wl.'.$j;
 						$redis->zAdd('issue.wl.s.index', $wlEntry["s"], $wlKey);
+						$redis->sAdd('issue.wl.seen', $issueList[$i].".".$logTime->format("U"));
 						$redis->set($wlKey, json_encode($wlEntry));
 					}
 					$redis->set('issue.'.$issueList[$i].'.wl.count', count($workLog["worklogs"]));
@@ -445,6 +450,20 @@ else
 
 				header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
 			}
+			else if ($_POST['action'] == "Stop Task and Log Rounded Time")
+			{
+				$redis->set($myself["key"].'_currentTask', "");
+				$startTime = (int) $redis->get($myself["key"].'_currentTaskStartTime');
+
+				$endTime = $startTime + ((int) $_POST['roundedseconds']) - $offset;
+
+				$url = $obj->jiraBaseUrl . 'rest/api/2/issue/'.$currentTask.'/worklog';
+				$timeStarted = date("Y-m-d\TH:i:s.000O", $startTime);
+				$res = $client->performRequest($url, json_encode(array("comment"=>$_POST["memo"], "started"=>$timeStarted, "timeSpentSeconds"=> (string)($endTime - $startTime))), "POST");
+				updateIssueDatabase($redis, $client, $obj, $currentTask);
+
+				header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
+			}
 		}
 		else
 		{
@@ -474,9 +493,11 @@ else
 			$currentTaskStartTime = (int) $redis->get($myself["key"].'_currentTaskStartTime');
 
 			$workTime = time() - $currentTaskStartTime;
+			$dailyTotal = (int) $redis->get("dailytotal.".date("Y.m.d", $currentTaskStartTime).".".$myself["key"]);
+			$rounded = max(0, (round(($dailyTotal + $workTime) / 1800.0) * 1800) - $dailyTotal);
 			echo "<table width=\"100%\" class=\"niceborder\" cellpadding=\"8\" border=\"1\">";
-			echo "<tr><td align=\"right\" width=\"20%\">Current task:</td><td><a href=\"https://".$JIRA_DOMAIN."/browse/".$currentTask."\">".$currentTask."</a></td></tr><tr><td align=\"right\">Started at:</td><td>".date("Y-m-d H:i:s", $currentTaskStartTime)."</td></tr><tr><td align=\"right\">Elapsed time:</td><td><b>".sprintf('%02d:%02d:%02d', ($workTime/3600),($workTime/60%60), $workTime%60)."</b></td></tr><tr><td align=\"right\">Task summary:</td><td>".htmlentities($redis->get('issue.'.$currentTask.'.summary')). "</td></tr>";
-			echo "<tr><td>&nbsp;</td><td><form action=\"index.php\" method=\"POST\" onsubmit=\"if(this.act == 'cancel') {return confirm('Do you really want to cancel your current time entry?');}\">Stop: <input type=\"text\" name=\"offset\" size=\"6\"> minutes ago.<br/>Memo: <input type=\"text\" name=\"memo\" size=\"70\"><br/><input type=\"hidden\" name=\"task\" value=\"".$currentTask."\"><div style=\"width: 280px\"><span id=\"buttonpair\"><input type=\"submit\" name=\"action\" onclick=\"this.form.act='log';\" value=\"Stop Task and Log Time\"><input type=\"submit\" name=\"action\" value=\"Cancel Task\" onclick=\"this.form.act='cancel';\"></span></div></form></td></tr>";
+			echo "<tr><td align=\"right\" width=\"20%\">Current task:</td><td><a href=\"https://".$JIRA_DOMAIN."/browse/".$currentTask."\">".$currentTask."</a></td></tr><tr><td align=\"right\">Started at:</td><td>".date("Y-m-d H:i:s", $currentTaskStartTime)."</td></tr><tr><td align=\"right\">Elapsed time:</td><td><b>".sprintf('%02d:%02d:%02d', ($workTime/3600),($workTime/60%60), $workTime%60)."</b></td></tr><tr><td align=\"right\">Rounded time:</td><td><b>".sprintf('%02d:%02d:%02d', ($rounded/3600),($rounded/60%60), $rounded%60)." for a total of ".sprintf('%02d:%02d:%02d', (($rounded+$dailyTotal)/3600),(($rounded+$dailyTotal)/60%60), ($rounded+$dailyTotal)%60)." worked today</b></td></tr><tr><td align=\"right\">Task summary:</td><td>".htmlentities($redis->get('issue.'.$currentTask.'.summary')). "</td></tr>";
+			echo "<tr><td>&nbsp;</td><td><form action=\"index.php\" method=\"POST\" onsubmit=\"if(this.act == 'cancel') {return confirm('Do you really want to cancel your current time entry?') };if(this.act == 'loground') {return confirm('Are you sure you want to log rounded time?');}\"><input type=\"hidden\" name=\"roundedseconds\" value=\"".$rounded."\">Stop: <input type=\"text\" name=\"offset\" size=\"6\"> minutes ago.<br/>Memo: <input type=\"text\" name=\"memo\" size=\"70\"><br/><input type=\"hidden\" name=\"task\" value=\"".$currentTask."\"><div style=\"width: 500px\"><span id=\"buttonpair\"><input type=\"submit\" name=\"action\" onclick=\"this.form.act='loground';\" style=\"margin-left:10px; margin-right:10px;\" value=\"Stop Task and Log Rounded Time\"><input type=\"submit\" name=\"action\" onclick=\"this.form.act='log';\" value=\"Stop Task and Log Time\"><input type=\"submit\" name=\"action\" value=\"Cancel Task\" onclick=\"this.form.act='cancel';\"></span></div></form></td></tr>";
 			echo "</table>";
 		}
 		if (!$currentTask)
