@@ -264,6 +264,131 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 	}
 }
 
+function getCurrentWorklog($myself, $redis, $worklog_date_string)
+{
+	$entries = array();
+	$recentData = $redis->hGetAll($myself["key"].'_recentTaskMetadata');
+	$recentTasks = array();
+	if ($redis->exists($myself["key"].'_recentTasks'))
+	{
+		$recentTasks = json_decode($redis->get($myself["key"].'_recentTasks'));
+	}
+
+	$worklog_date = date_parse($worklog_date_string);
+	$arrival_time = date_parse($recentData["arrival_time"]);
+	$break_time = date_parse($recentData["break_time"]);
+	$break_duration = date_parse($recentData["break_duration"]);
+	$work_duration = date_parse($recentData["work_duration"]);
+	$work_duration_seconds = $work_duration["hour"] * 60 * 60 + $work_duration["minute"] * 60;
+	$break_duration_seconds = $break_duration["hour"] * 60 * 60 + $break_duration["minute"] * 60;
+	$startTime = new DateTime($worklog_date["year"]."/".$worklog_date["month"]."/".$worklog_date["day"]."T".$arrival_time["hour"].":".$arrival_time["minute"].":00", new DateTimeZone($GLOBALS['DEFAULT_TIMEZONE']));
+	$startTimeSeconds = $startTime->format("U");
+	$breakTime = 0;
+	if ($break_duration_seconds)
+	{
+		$breakTime = new DateTime($worklog_date["year"]."/".$worklog_date["month"]."/".$worklog_date["day"]."T".$break_time["hour"].":".$break_time["minute"].":00", new DateTimeZone($GLOBALS['DEFAULT_TIMEZONE']));
+		$breakTime = $breakTime->format("U");
+	}
+	$recentTasksToLog = array();
+	$weightSum = 0.0;
+	foreach ($recentTasks as $task)
+	{
+		if (array_key_exists($task."-sel-check", $recentData) && $recentData[$task."-sel-check"])
+		{
+			$recentTasksToLog[] = $task;
+			if (array_key_exists($task."-sel-weight", $recentData) && is_numeric($recentData[$task."-sel-weight"]))
+			{
+				$weightSum += (double) $recentData[$task."-sel-weight"];
+			}
+			else
+			{
+				$weightSum += 1.0;
+			}
+		}
+	}
+	$totalDuration = 0;
+	foreach ($recentTasksToLog as $task)
+	{
+		$entry = array();
+		$entry["task"] = $task;
+		$entry["memo"] = $recentData[$task."-sel-memo"];
+		$entry["startTime"] = $startTimeSeconds;
+		// If we line up perfectly with the start of break, just start task after break
+		if ($startTimeSeconds == $breakTime)
+		{
+			echo "LINED UP";
+			$breakentry = array();
+			$breakentry["task"] = "BREAK";
+			$breakentry["memo"] = "";
+			$breakentry["startTime"] = $breakTime;
+			$breakentry["duration"] = $break_duration_seconds;
+			$entries[] = $breakentry;
+			$startTimeSeconds = $breakTime + $break_duration_seconds;
+			$entry["startTime"] = $startTimeSeconds;
+			$breakTime = 0;
+		}
+
+		$weight = 1.0;
+		if (array_key_exists($task."-sel-weight", $recentData) && is_numeric($recentData[$task."-sel-weight"]))
+		{
+			$weight = (double) $recentData[$task."-sel-weight"];
+		}
+		$endTime = $entry["startTime"] + ((int) (round($weight / $weightSum * $work_duration_seconds / 600.0) * 600));
+		if ($breakTime && $endTime > $breakTime)
+		{
+			$entry["duration"] = $breakTime - $entry["startTime"];
+			$totalDuration += $entry["duration"];
+			$entries[] = $entry;
+
+			$breakentry = array();
+			$breakentry["task"] = "BREAK";
+			$breakentry["memo"] = "";
+			$breakentry["startTime"] = $breakTime;
+			$breakentry["duration"] = $break_duration_seconds;
+			$entries[] = $breakentry;
+
+			$entry = array();
+			$entry["task"] = $task;
+			$entry["memo"] = $recentData[$task."-sel-memo"];
+			$startTimeSeconds = $breakTime + $break_duration_seconds;
+			$entry["startTime"] = $startTimeSeconds;
+			$endTime = $entry["startTime"] + $endTime - $breakTime;
+			$breakTime = 0;
+		}
+		$entry["duration"] = max(600, $endTime - $entry["startTime"]);
+		$totalDuration += $entry["duration"];
+		$entries[] = $entry;
+
+		$startTimeSeconds = $startTimeSeconds + $entry["duration"];
+	}
+
+	$entryToTweak = count($entries) - 1;
+	while($totalDuration != $work_duration_seconds && $entryToTweak >= 0)
+	{
+		if ($entries[$entryToTweak]["task"] != "BREAK")
+		{
+			$adjustment = max($entries[$entryToTweak]["duration"] + $work_duration_seconds - $totalDuration, 600);
+			$adjustmentAmount = $adjustment - $entries[$entryToTweak]["duration"];
+			$entries[$entryToTweak]["duration"] = $adjustment;
+			for($i = $entryToTweak + 1; $i < count($entries); $i++)
+			{
+				$entries[$i]["startTime"] += $adjustmentAmount;
+			}
+		}
+		$totalDuration = 0;
+		$entryToTweak--;
+		foreach ($entries as $entry)
+		{
+			if ($entry["task"] != "BREAK")
+			{
+				$totalDuration += $entry["duration"];
+			}
+		}
+	}
+
+	return $entries;
+}
+
 if (isset($_GET["logout"]) && $_GET["logout"] == "true")
 {
 	setcookie($COOKIE_PREFIX."_jira_oauth_token", "", time() - 3600);
@@ -332,6 +457,141 @@ else
 		echo "#buttonpair { overflow: hidden; }";
 		echo "#buttonpair input { float:right }";
 		echo "</style>";
+		?>
+<script>
+var lastSaved = {};
+function refreshSelection()
+{
+	var allInputs = document.getElementsByTagName("input");
+	var somethingChecked = false;
+	for (var i = 0; i < allInputs.length; i++)
+	{
+		if (allInputs[i].type == 'checkbox')
+		{
+			if(allInputs[i].checked)
+			{
+				document.getElementById(allInputs[i].getAttribute("name") + "-edit").style.display = "inline";
+				somethingChecked = true;
+			}
+			else
+			{
+				document.getElementById(allInputs[i].getAttribute("name") + "-edit").style.display = "none";
+			}
+		}
+	}
+	if (document.getElementById("submitMultiple"))
+	{
+		if (somethingChecked)
+		{
+			document.getElementById("submitMultiple").style.display = "inline";
+		}
+		else
+		{
+			document.getElementById("submitMultiple").style.display = "none";
+		}
+	}
+	saveRecent();
+}
+var saveTimeout = null;
+var dataToSave = null;
+
+function actuallySave()
+{
+	console.log(dataToSave);
+	var xmlhttp = new XMLHttpRequest();   // new HttpRequest instance 
+	xmlhttp.open("POST", "recent.php");
+	xmlhttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+	xmlhttp.send(JSON.stringify(dataToSave));
+	dataToSave = {};
+}
+
+function saveRecent()
+{
+	if (saveTimeout)
+	{
+		window.clearTimeout(saveTimeout);
+		saveTimeout = null;
+		dataToSave = null;
+	}
+
+	var allInputs = document.getElementsByTagName("input");
+	var saveData = {};
+	for (var i = 0; i < allInputs.length; i++)
+	{
+		if (allInputs[i].type == 'checkbox')
+		{
+			if (allInputs[i].checked)
+			{
+				saveData[allInputs[i].getAttribute("name") + "-check"] = "checked";
+			}
+			else
+			{
+				saveData[allInputs[i].getAttribute("name") + "-check"] = "";
+			}
+			if (document.getElementById(allInputs[i].getAttribute("name") + "-memo"))
+			{
+				saveData[allInputs[i].getAttribute("name") + "-memo"] = document.getElementById(allInputs[i].getAttribute("name") + "-memo").value;
+			}
+			if (document.getElementById(allInputs[i].getAttribute("name") + "-weight"))
+			{
+				saveData[allInputs[i].getAttribute("name") + "-weight"] = document.getElementById(allInputs[i].getAttribute("name") + "-weight").value;
+			}
+		}
+	}
+	if (document.getElementById("current_memo"))
+	{
+		saveData["current_offset"] = document.getElementById("current_offset").value;
+		saveData["current_memo"] = document.getElementById("current_memo").value;
+	}
+	if (document.getElementById("arrival_time"))
+	{
+		if (document.getElementById("todays_date").value != document.getElementById("worklog_date").value)
+		{
+			saveData["worklog_date"] = document.getElementById("worklog_date").value;
+		}
+		saveData["arrival_time"] = document.getElementById("arrival_time").value;
+		saveData["break_time"] = document.getElementById("break_time").value;
+		saveData["break_duration"] = document.getElementById("break_duration").value;
+		saveData["work_duration"] = document.getElementById("work_duration").value;
+	}
+
+	dataToSave = saveData;
+	saveTimeout = window.setTimeout(actuallySave, 1000);
+}
+
+window.onload = function() {
+	var req = new XMLHttpRequest();
+	req.overrideMimeType("application/json");
+	req.open('GET', 'recent.php', true);
+	req.onload  = function() {
+		var dataToLoad = JSON.parse(req.responseText);
+		for (var prop in dataToLoad)
+		{
+			if (document.getElementById(prop))
+			{
+				if (prop.indexOf('-check') > 0)
+				{
+					if (dataToLoad[prop])
+					{
+						document.getElementById(prop).checked = true;
+					}
+					else
+					{
+						document.getElementById(prop).checked = false;
+					}
+				}
+				else
+				{
+					document.getElementById(prop).value = dataToLoad[prop];
+				}
+			}
+		}
+		refreshSelection();
+	};
+	req.send(null);
+}
+</script>
+		<?php
 		echo $EXTRA_HEAD_HTML;
 		echo "</head><body>";
 		if ($authorizedReporter)
@@ -422,12 +682,20 @@ else
 				array_splice($recentTasks, $idx, 1);
 			}
 			$recentTasks[] = $newTask;
-			if (count($recentTasks) > 5)
+			$newRecentTasks = array();
+			for ($i = count($recentTasks)-1 ; $i >= 0; $i--)
 			{
-				$recentTasks = array_slice($recentTasks, -10, 10);
+				if ($redis->hExists($myself["key"].'_recentTaskMetadata', $recentTasks[$i]."-sel-check"))
+				{
+					array_unshift($newRecentTasks, $recentTasks[$i]);
+				}
+				else if (count($newRecentTasks) < 10)
+				{
+					array_unshift($newRecentTasks, $recentTasks[$i]);
+				}
 			}
 
-			$redis->set($myself["key"].'_recentTasks', json_encode($recentTasks));
+			$redis->set($myself["key"].'_recentTasks', json_encode($newRecentTasks));
 		}
 		if ($currentTask)
 		{
@@ -480,6 +748,152 @@ else
 					echo "<h3>Error: No valid task was provided</h3>";
 				}
 			}
+			else if ($_POST['action'] == "Cancel")
+			{
+				header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
+			}
+			else if ($_POST['action'] == "Save Worklog")
+			{
+				if ($_POST['confirm_early_submit'] == "on" && $_POST['confirm_date'] == "on")
+				{
+					$worklog = getCurrentWorklog($myself, $redis, $_POST['worklog_date']);
+					foreach($worklog as $entry)
+					{
+						if ($entry["task"] != "BREAK")
+						{
+							$url = $obj->jiraBaseUrl . 'rest/api/2/issue/'.$entry["task"].'/worklog';
+							$timeStarted = date("Y-m-d\TH:i:s.000O", $entry["startTime"]);
+							$res = $client->performRequest($url, json_encode(array("comment"=>$entry["memo"], "started"=>$timeStarted, "timeSpentSeconds"=> (string)($entry["duration"]))), "POST");
+							updateIssueDatabase($redis, $client, $obj, $entry["task"]);
+						}
+					}
+					$redis->del($myself["key"].'_recentTaskMetadata');
+				}
+
+				header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
+			}
+			else if ($_POST['action'] == "Submit Worklog")
+			{
+				echo "<form action=\"index.php\" method=\"POST\"><h3>Please confirm your worklog for ".$_POST['worklog_date'].": </h3>";
+				$currentTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
+				$recentData = $redis->hGetAll($myself["key"].'_recentTaskMetadata');
+				$worklog_date = date_parse($_POST['worklog_date']);
+				$arrival_time = date_parse($recentData["arrival_time"]);
+				$break_time = date_parse($recentData["break_time"]);
+				$break_duration = date_parse($recentData["break_duration"]);
+				$work_duration = date_parse($recentData["work_duration"]);
+				$work_duration_seconds = $work_duration["hour"] * 60 * 60 + $work_duration["minute"] * 60;
+				$errors = false;
+				if (gettype($worklog_date["year"]) != "integer" || gettype($worklog_date["month"]) != "integer" || gettype($worklog_date["day"]) != "integer" || $worklog_date["warning_count"] > 0 || $worklog_date["error_count"] > 0)
+				{
+					echo "Improperly formatted date for worklog date.<br><br>";
+					foreach($worklog_date["warnings"] as $warning)
+					{
+						echo $warning."<br>";
+					}
+					foreach($worklog_date["warnings"] as $error)
+					{
+						echo $error."<br>";
+					}
+					$errors = true;
+				}
+				if (gettype($arrival_time["hour"]) != "integer" || gettype($arrival_time["minute"]) != "integer" || $arrival_time["warning_count"] > 0 || $arrival_time["error_count"] > 0)
+				{
+					echo "Improperly formatted time for arrival time.<br><br>";
+					foreach($arrival_time["warnings"] as $warning)
+					{
+						echo $warning."<br>";
+					}
+					foreach($arrival_time["warnings"] as $error)
+					{
+						echo $error."<br>";
+					}
+					$errors = true;
+				}
+				if (gettype($break_time["hour"]) != "integer" || gettype($break_time["minute"]) != "integer" || $break_time["warning_count"] > 0 || $break_time["error_count"] > 0)
+				{
+					echo "Improperly formatted time for break time.<br><br>";
+					foreach($break_time["warnings"] as $warning)
+					{
+						echo $warning."<br>";
+					}
+					foreach($break_time["warnings"] as $error)
+					{
+						echo $error."<br>";
+					}
+					$errors = true;
+				}
+				if (gettype($break_duration["hour"]) != "integer" || gettype($break_duration["minute"]) != "integer" || $break_duration["warning_count"] > 0 || $break_duration["error_count"] > 0)
+				{
+					echo "Improperly formatted time for break duration.<br><br>";
+					foreach($break_duration["warnings"] as $warning)
+					{
+						echo $warning."<br>";
+					}
+					foreach($break_duration["warnings"] as $error)
+					{
+						echo $error."<br>";
+					}
+					$errors = true;
+				}
+				if (gettype($work_duration["hour"]) != "integer" || gettype($work_duration["minute"]) != "integer" || $work_duration["warning_count"] > 0 || $work_duration["error_count"] > 0)
+				{
+					echo "Improperly formatted time for work duration.<br><br>";
+					foreach($work_duration["warnings"] as $warning)
+					{
+						echo $warning."<br>";
+					}
+					foreach($work_duration["warnings"] as $error)
+					{
+						echo $error."<br>";
+					}
+					$errors = true;
+				}
+				if (!$errors)
+				{
+					if ($_POST['worklog_date'] == $currentTime->format("Y/m/d"))
+					{
+						echo "<input type=\"hidden\" name=\"confirm_date\" value=\"on\"/>";
+					}
+					else
+					{
+						echo "You have submitted a worklog for a date that is not today.  Did you intend to do this? Please select this checkbox to confirm: <input type=\"checkbox\" name=\"confirm_date\"/><br><br>";
+					}
+					$worklog = getCurrentWorklog($myself, $redis, $_POST['worklog_date']);
+					if ($worklog[count($worklog)-1]["startTime"] + $worklog[count($worklog)-1]["duration"] > time() + 20*60)
+					{
+						echo "You have submitted a worklog for a future end time.  Did you intend to do this? Please select this checkbox to confirm: <input type=\"checkbox\" name=\"confirm_early_submit\"/><br><br>";
+					}
+					else
+					{
+						echo "<input type=\"hidden\" name=\"confirm_early_submit\" value=\"on\"/>";
+					}
+					echo "<input type=\"hidden\" name=\"worklog_date\" value=\"".htmlentities($_POST['worklog_date'])."\"/>";
+					echo "<table width=\"1000\" class=\"niceborder\" cellpadding=\"8\" border=\"1\">";
+					echo "<tr><th width=\"15%\">Begin Time</th><th width=\"15%\">End Time</th><th>Task</th><th>Memo</th></tr>";
+					$totalDuration = 0;
+					foreach($worklog as $worklogentry)
+					{
+						echo "<tr><td>".date("Y/m/d H:i", $worklogentry["startTime"])."</td><td>".date("Y/m/d H:i", $worklogentry["startTime"]+$worklogentry["duration"])."</td><td>".htmlentities($worklogentry["task"])."</td><td>".htmlentities($worklogentry["memo"])."</td></tr>";
+						if ($worklogentry["task"] != "BREAK")
+						{
+							$totalDuration += $worklogentry["duration"];
+						}
+					}
+					echo "</table><br><b>Work Duration: ".sprintf('%02d:%02d:%02d', ($totalDuration/3600),($totalDuration/60%60), $totalDuration%60)."</b><br><br>";
+					if ($totalDuration != $work_duration_seconds)
+					{
+						echo "The computed work duration does not match your stated work duration.  Please go adjust your task weights to allow the duration to be computed properly.";
+						$errors = true;
+					}
+				}
+				echo "<input type=\"submit\" name=\"action\" value=\"Cancel\">";
+				if (!$errors)
+				{
+					echo "&nbsp;&nbsp;&nbsp;&nbsp;<input type=\"submit\" name=\"action\" value=\"Save Worklog\"></form>";
+				}
+				exit(0);
+			}
 		}
 		// Now get current task again (it may have changed)
 		$currentTask = "";
@@ -497,7 +911,7 @@ else
 			$rounded = max(0, (round(($dailyTotal + $workTime) / 1800.0) * 1800) - $dailyTotal);
 			echo "<table width=\"100%\" class=\"niceborder\" cellpadding=\"8\" border=\"1\">";
 			echo "<tr><td align=\"right\" width=\"20%\">Current task:</td><td><a href=\"https://".$JIRA_DOMAIN."/browse/".$currentTask."\">".$currentTask."</a></td></tr><tr><td align=\"right\">Started at:</td><td>".date("Y-m-d H:i:s", $currentTaskStartTime)."</td></tr><tr><td align=\"right\">Elapsed time:</td><td><b>".sprintf('%02d:%02d:%02d', ($workTime/3600),($workTime/60%60), $workTime%60)."</b></td></tr><tr><td align=\"right\">Rounded time:</td><td><b>".sprintf('%02d:%02d:%02d', ($rounded/3600),($rounded/60%60), $rounded%60)." for a total of ".sprintf('%02d:%02d:%02d', (($rounded+$dailyTotal)/3600),(($rounded+$dailyTotal)/60%60), ($rounded+$dailyTotal)%60)." worked today</b></td></tr><tr><td align=\"right\">Task summary:</td><td>".htmlentities($redis->get('issue.'.$currentTask.'.summary')). "</td></tr>";
-			echo "<tr><td>&nbsp;</td><td><form action=\"index.php\" method=\"POST\" onsubmit=\"if(this.act == 'cancel') {return confirm('Do you really want to cancel your current time entry?') };if(this.act == 'loground') {return confirm('Are you sure you want to log rounded time?');}\"><input type=\"hidden\" name=\"roundedseconds\" value=\"".$rounded."\">Stop: <input type=\"text\" name=\"offset\" size=\"6\"> minutes ago.<br/>Memo: <input type=\"text\" name=\"memo\" size=\"70\"><br/><input type=\"hidden\" name=\"task\" value=\"".$currentTask."\"><div style=\"width: 500px\"><span id=\"buttonpair\"><input type=\"submit\" name=\"action\" onclick=\"this.form.act='loground';\" style=\"margin-left:10px; margin-right:10px;\" value=\"Stop Task and Log Rounded Time\"><input type=\"submit\" name=\"action\" onclick=\"this.form.act='log';\" value=\"Stop Task and Log Time\"><input type=\"submit\" name=\"action\" value=\"Cancel Task\" onclick=\"this.form.act='cancel';\"></span></div></form></td></tr>";
+			echo "<tr><td>&nbsp;</td><td><form action=\"index.php\" method=\"POST\" onsubmit=\"if(this.act == 'cancel') {return confirm('Do you really want to cancel your current time entry?') };if(this.act == 'loground') {return confirm('Are you sure you want to log rounded time?');}\"><input type=\"hidden\" name=\"roundedseconds\" value=\"".$rounded."\">Stop: <input type=\"text\" name=\"offset\" size=\"6\" id=\"current_offset\" onKeyUp=\"saveRecent();\"> minutes ago.<br/>Memo: <input type=\"text\" name=\"memo\" id=\"current_memo\" onKeyUp=\"saveRecent();\" size=\"70\"><br/><input type=\"hidden\" name=\"task\" value=\"".$currentTask."\"><div style=\"width: 500px\"><span id=\"buttonpair\"><input type=\"submit\" name=\"action\" onclick=\"this.form.act='loground';\" style=\"margin-left:10px; margin-right:10px;\" value=\"Stop Task and Log Rounded Time\"><input type=\"submit\" name=\"action\" onclick=\"this.form.act='log';\" value=\"Stop Task and Log Time\"><input type=\"submit\" name=\"action\" value=\"Cancel Task\" onclick=\"this.form.act='cancel';\"></span></div></form></td></tr>";
 			echo "</table>";
 		}
 		if (!$currentTask)
@@ -507,7 +921,7 @@ else
 			{
 				echo "<tr>";
 				echo "<td width=\"15%\" align=\"right\"><a href=\"https://".$JIRA_DOMAIN."/browse/".$recentTasks[$i]."\">".$recentTasks[$i]."</a></td>";
-				echo "<td>".htmlentities($redis->get('issue.'.$recentTasks[$i].'.summary'))."</td>";
+				echo "<td><input type=\"checkbox\" name=\"".$recentTasks[$i]."-sel\" onClick=\"refreshSelection();\" id=\"".$recentTasks[$i]."-sel-check\">&nbsp;&nbsp;".htmlentities($redis->get('issue.'.$recentTasks[$i].'.summary'))."<span id=\"".$recentTasks[$i]."-sel-edit\" style=\"display: none;\"><br><br><div style=\"margin-left: 30px\">Memo: <input onKeyUp=\"saveRecent();\" type=\"text\" id=\"".$recentTasks[$i]."-sel-memo\" size=\"80\">&nbsp;&nbsp;&nbsp;&nbsp;Time Weight: <input onKeyUp=\"saveRecent();\" type=\"text\" id=\"".$recentTasks[$i]."-sel-weight\" size=\"8\" value=\"1.0\"></div></span></td>";
 				echo "<td align=\"right\" valign=\"center\" width=\"30%\"><form action=\"index.php\" method=\"POST\">Start <input type=\"text\" name=\"offset\" size=\"6\"> minutes ago. <input type=\"submit\" name=\"action\" value=\"Start Task\"><input type=\"hidden\" name=\"task\" value=\"".$recentTasks[$i]."\"></form></td>";
 				echo "</tr>";
 			}
@@ -517,6 +931,18 @@ else
 			}
 			echo "<tr><td colspan=\"3\" align=\"right\"><form action=\"index.php\" method=\"POST\">Manual task entry: <input type=\"text\" name=\"task\" size=\"15\"> Start <input type=\"text\" name=\"offset\" size=\"6\"> minutes ago. <input type=\"submit\" name=\"action\" value=\"Start Task\"></form></td></tr>";
 			echo "</table>";
+			echo "<div id=\"submitMultiple\" style=\"display: none\"><h3>Multiple Worklog Submission: </h3><form action=\"index.php\" method=\"POST\"><table width=\"350px\" class=\"niceborder\" cellpadding=\"8\" border=\"1\">";
+			$currentTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
+			echo "<tr><td align=\"right\">Date:</td><td><input type=\"hidden\" id=\"todays_date\" name=\"todays_date\" value=\"".$currentTime->format("Y/m/d")."\"><input type=\"text\" id=\"worklog_date\" name=\"worklog_date\" value=\"".$currentTime->format("Y/m/d")."\" onKeyUp=\"saveRecent();\"></td></tr>";
+			echo "";
+			echo "<tr><td align=\"right\">Arrival Time:</td><td><input type=\"text\" id=\"arrival_time\" value=\"09:00\" onKeyUp=\"saveRecent();\"></td></tr>";
+			echo "<tr><td align=\"right\">Break Time:</td><td><input type=\"text\" id=\"break_time\" value=\"12:00\" onKeyUp=\"saveRecent();\"></td></tr>";
+			echo "<tr><td align=\"right\">Break Duration:</td><td><input type=\"text\" id=\"break_duration\" value=\"00:30\" onKeyUp=\"saveRecent();\"></td></tr>";
+			echo "<tr><td align=\"right\">Work Duration:</td><td><input type=\"text\" id=\"work_duration\" value=\"08:00\" onKeyUp=\"saveRecent();\"></td></tr>";
+			echo "<tr><td>&nbsp;</td><td><input type=\"submit\" name=\"action\" id=\"multiple_worklog_submit\" value=\"Submit Worklog\" onClick=\"submitWorklog();\"></td></tr>";
+			
+			echo "</table></form></div>";
+			
 		}
 		echo "<h3>Current Report:</h3><form action=\"".$_SERVER['REQUEST_URI']."\" method=\"GET\"><select name=\"report\" onChange=\"this.form.submit();\">";
 		echo "<option value=\"week\"".($_GET["report"] == "week"?" selected=\"selected\"":"").">My Weekly Summary</option>";
