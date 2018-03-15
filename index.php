@@ -549,6 +549,10 @@ function saveRecent()
 		{
 			saveData["worklog_date"] = document.getElementById("worklog_date").value;
 		}
+		else
+		{
+			saveData["worklog_date"] = "today";
+		}
 		saveData["arrival_time"] = document.getElementById("arrival_time").value;
 		saveData["break_time"] = document.getElementById("break_time").value;
 		saveData["break_duration"] = document.getElementById("break_duration").value;
@@ -578,6 +582,17 @@ window.onload = function() {
 					else
 					{
 						document.getElementById(prop).checked = false;
+					}
+				}
+				else if (prop == "worklog_date")
+				{
+					if (dataToLoad[prop] == "today")
+					{
+						document.getElementById(prop).value = document.getElementById("todays_date").value;
+					}
+					else
+					{
+						document.getElementById(prop).value = dataToLoad[prop];
 					}
 				}
 				else
