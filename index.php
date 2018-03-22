@@ -717,6 +717,7 @@ window.onload = function() {
 			if ($_POST['action'] == "Cancel Task")
 			{
 				$redis->set($myself["key"].'_currentTask', "");
+				$redis->del($myself["key"].'_recentTaskMetadata');
 				header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
 			}
 			else if ($_POST['action'] == "Stop Task and Log Time")
@@ -730,6 +731,7 @@ window.onload = function() {
 				$timeStarted = date("Y-m-d\TH:i:s.000O", $startTime);
 				$res = $client->performRequest($url, json_encode(array("comment"=>$_POST["memo"], "started"=>$timeStarted, "timeSpentSeconds"=> (string)($endTime - $startTime))), "POST");
 				updateIssueDatabase($redis, $client, $obj, $currentTask);
+				$redis->del($myself["key"].'_recentTaskMetadata');
 
 				header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
 			}
@@ -744,6 +746,7 @@ window.onload = function() {
 				$timeStarted = date("Y-m-d\TH:i:s.000O", $startTime);
 				$res = $client->performRequest($url, json_encode(array("comment"=>$_POST["memo"], "started"=>$timeStarted, "timeSpentSeconds"=> (string)($endTime - $startTime))), "POST");
 				updateIssueDatabase($redis, $client, $obj, $currentTask);
+				$redis->del($myself["key"].'_recentTaskMetadata');
 
 				header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
 			}
