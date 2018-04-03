@@ -316,7 +316,6 @@ function getCurrentWorklog($myself, $redis, $worklog_date_string)
 		// If we line up perfectly with the start of break, just start task after break
 		if ($startTimeSeconds == $breakTime)
 		{
-			echo "LINED UP";
 			$breakentry = array();
 			$breakentry["task"] = "BREAK";
 			$breakentry["memo"] = "";
@@ -333,7 +332,7 @@ function getCurrentWorklog($myself, $redis, $worklog_date_string)
 		{
 			$weight = (double) $recentData[$task."-sel-weight"];
 		}
-		$endTime = $entry["startTime"] + ((int) (round($weight / $weightSum * $work_duration_seconds / 600.0) * 600));
+		$endTime = $entry["startTime"] + ((int) (round($weight / $weightSum * $work_duration_seconds / 900.0) * 900));
 		if ($breakTime && $endTime > $breakTime)
 		{
 			$entry["duration"] = $breakTime - $entry["startTime"];
@@ -355,7 +354,7 @@ function getCurrentWorklog($myself, $redis, $worklog_date_string)
 			$endTime = $entry["startTime"] + $endTime - $breakTime;
 			$breakTime = 0;
 		}
-		$entry["duration"] = max(600, $endTime - $entry["startTime"]);
+		$entry["duration"] = max(900, $endTime - $entry["startTime"]);
 		$totalDuration += $entry["duration"];
 		$entries[] = $entry;
 
@@ -367,7 +366,7 @@ function getCurrentWorklog($myself, $redis, $worklog_date_string)
 	{
 		if ($entries[$entryToTweak]["task"] != "BREAK")
 		{
-			$adjustment = max($entries[$entryToTweak]["duration"] + $work_duration_seconds - $totalDuration, 600);
+			$adjustment = max($entries[$entryToTweak]["duration"] + $work_duration_seconds - $totalDuration, 900);
 			$adjustmentAmount = $adjustment - $entries[$entryToTweak]["duration"];
 			$entries[$entryToTweak]["duration"] = $adjustment;
 			for($i = $entryToTweak + 1; $i < count($entries); $i++)
