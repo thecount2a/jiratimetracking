@@ -875,12 +875,12 @@ window.onload = function() {
 					}
 					else
 					{
-						echo "You have submitted a worklog for a date that is not today.  Did you intend to do this? Please select this checkbox to confirm: <input type=\"checkbox\" name=\"confirm_date\"/><br><br>";
+						echo "You have submitted a worklog for a date that is not today.  Did you intend to do this? Please select this checkbox to confirm: <input type=\"checkbox\" name=\"confirm_date\" onchange=\"document.getElementById('save_worklog_button').disabled = !this.checked;\"/><br><br>";
 					}
 					$worklog = getCurrentWorklog($myself, $redis, $_POST['worklog_date']);
 					if ($worklog[count($worklog)-1]["startTime"] + $worklog[count($worklog)-1]["duration"] > time() + 20*60)
 					{
-						echo "You have submitted a worklog for a future end time.  Did you intend to do this? Please select this checkbox to confirm: <input type=\"checkbox\" name=\"confirm_early_submit\"/><br><br>";
+						echo "You have submitted a worklog for a future end time.  Did you intend to do this? Please select this checkbox to confirm: <input type=\"checkbox\" name=\"confirm_early_submit\" onchange=\"document.getElementById('save_worklog_button').disabled = !this.checked;\"/><br><br>";
 					}
 					else
 					{
@@ -908,7 +908,7 @@ window.onload = function() {
 				echo "<input type=\"submit\" name=\"action\" value=\"Cancel\">";
 				if (!$errors)
 				{
-					echo "&nbsp;&nbsp;&nbsp;&nbsp;<input type=\"submit\" name=\"action\" value=\"Save Worklog\"></form>";
+					echo "&nbsp;&nbsp;&nbsp;&nbsp;<input type=\"submit\" name=\"action\" id=\"save_worklog_button\" value=\"Save Worklog\"></form>";
 				}
 				exit(0);
 			}
