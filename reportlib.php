@@ -21,7 +21,7 @@ function runHledger($params, $input, &$output)
 	    // 1 => readable handle connected to child stdout
 	    // Any error output will be appended to /tmp/error-output.txt
 
-	    fwrite($pipes[0], $input);
+	    fwrite($pipes[0], mb_convert_encoding($input, "ASCII"));
 	    fclose($pipes[0]);
 
 	    $output = stream_get_contents($pipes[1]);
