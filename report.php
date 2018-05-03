@@ -85,7 +85,20 @@ else
 		$startTime->modify('first day of last month')->setTime(0,0,0);
 		$dataStartTime = $startTime->format('U');
 		$dataEndTime = $endTime->format('U');
-		if ($_GET["period"] == "This Week")
+		$period = $_GET["period"];
+		if ($_GET["begin_period"] && $_GET["end_period"])
+		{
+			$period = $_GET["begin_period"].' - '.$_GET["end_period"];
+		}
+		if (strpos($period, ' - ') !== FALSE)
+		{
+			$parts = explode(' - ', $period);
+			$startTime = new DateTime($parts[0], new DateTimeZone($DEFAULT_TIMEZONE));
+			$startTime->setTime(0,0,0);
+			$endTime = new DateTime($parts[1], new DateTimeZone($DEFAULT_TIMEZONE));
+			$endTime->setTime(23,59,59);
+		}
+		else if ($_GET["period"] == "This Week")
 		{
 			$startTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$startTime->modify('Last Sunday')->setTime(0,0,0);
@@ -131,14 +144,6 @@ else
 			$endTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
 			$endTime->setDate($endTime->format('Y'), 1, 1)->setTime(0,0,0);
 		}
-		else if (strpos($_GET["period"], ' - ') !== FALSE)
-		{
-			$parts = explode(' - ', $_GET["period"]);
-			$startTime = new DateTime($parts[0], new DateTimeZone($DEFAULT_TIMEZONE));
-			$startTime->setTime(0,0,0);
-			$endTime = new DateTime($parts[1], new DateTimeZone($DEFAULT_TIMEZONE));
-			$endTime->setTime(23,59,59);
-		}
 		$reportStartTime = (int) $startTime->format('U');
 		$reportEndTime = (int) $endTime->format('U');
 		//echo $reportStartTime. " " . $startTime->format("Y/m/d H:i:s");
@@ -178,6 +183,7 @@ else
 				echo "<option value=\"".$periods[$i]."\"".($_GET["period"] == $periods[$i]?" selected=\"selected\"":"").">".$periods[$i]."</option>";
 			}
 			echo "</select>";
+			echo "<br/><br/><input type=\"text\" size=\"8\" name=\"begin_period\" value=\"".$_GET["begin_period"]."\" onChange=\"this.form.submit();\"> to <input type=\"text\" size=\"8\" name=\"end_period\" value=\"".$_GET["end_period"]."\" onChange=\"this.form.submit();\">";
 			echo "<br/><br/>Grouping:<br/><select name=\"grouping\" onChange=\"this.form.submit();\">";
 			$groupings = array("Daily", "Weekly", "Monthly", "Yearly");
 			for ($i = 0; $i < count($groupings); $i++)
@@ -271,7 +277,7 @@ else
 							  || (gettype($_GET["project"]) == "array" && array_search($subparts[0], $_GET["project"]) !== FALSE))
 							{
 
-								$ledgerStr = $ledgerStr.$obj->l."\n";
+								$ledgerStr = preg_replace("/billing:[A-Z]*_/", "billing:", $ledgerStr.$obj->l)."\n";
 								// There can be multiple transactions if the worklog entry spans multiple days
 								for ($j = 0; $j < (substr_count($ledgerStr, "\n\n")+1); $j++)
 								{

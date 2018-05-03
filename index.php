@@ -1022,7 +1022,7 @@ window.onload = function() {
 			$obj = json_decode($itemObjs[$i]);
 			if ($obj->a == $myself["key"])
 			{
-				$ledgerStr = $ledgerStr.$obj->l."\n";
+				$ledgerStr = preg_replace("/billing:[A-Z]*_/", "billing:", $ledgerStr.$obj->l)."\n";
 
 				$wlkey = $items[$i];
 				$parts = explode(".", $wlkey);
