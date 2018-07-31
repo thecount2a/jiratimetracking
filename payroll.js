@@ -482,15 +482,15 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 						{
 							if (code_to_quickbooks_pitem[code])
 							{
-								pitemOverrides[code_to_quickbooks[code]] = code_to_quickbooks_pitem[code];
+								pitemOverrides[code_to_quickbooks[code] + "_+_+_+_" + code_to_quickbooks_pitem[code]] = code_to_quickbooks_pitem[code];
 							}
-							if (aggregate[code_to_quickbooks[code]])
+							if (aggregate[code_to_quickbooks[code] + "____" + code_to_quickbooks_pitem[code]])
 							{
-								aggregate[code_to_quickbooks[code]] += Number($scope.users[empId][$scope.users[empId].length-1][col]);
+								aggregate[code_to_quickbooks[code] + "_+_+_+_" + code_to_quickbooks_pitem[code]] += Number($scope.users[empId][$scope.users[empId].length-1][col]);
 							}
 							else
 							{
-								aggregate[code_to_quickbooks[code]] = Number($scope.users[empId][$scope.users[empId].length-1][col]);
+								aggregate[code_to_quickbooks[code]+ "_+_+_+_" + code_to_quickbooks_pitem[code]] = Number($scope.users[empId][$scope.users[empId].length-1][col]);
 							}
 						}
 					}
@@ -510,11 +510,12 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 		for (var quickbooks in aggregate)
 		{
 			var thisPitem = qbPitem;
+			var quickbookssplit = quickbooks.split('_+_+_+_');
 			if (pitemOverrides[quickbooks])
 			{
 				thisPitem = pitemOverrides[quickbooks];
 			}
-			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+quickbooks+'\t'+qbName+'\t'+qbItem+'\t'+thisPitem+'\t'+Math.floor(aggregate[quickbooks]).toString() + '.' + pad(Math.round((aggregate[quickbooks] - Math.floor(aggregate[quickbooks])) * 100), 2) +'\t\t0\n';
+			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+quickbookssplit[0]+'\t'+qbName+'\t'+qbItem+'\t'+thisPitem+'\t'+Math.floor(aggregate[quickbooks]).toString() + '.' + pad(Math.round((aggregate[quickbooks] - Math.floor(aggregate[quickbooks])) * 100), 2) +'\t\t0\n';
 		}
 		var thisPitem = qbPitem;
 		if (vacation_quickbooks_pitem)
