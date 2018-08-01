@@ -484,7 +484,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 							{
 								pitemOverrides[code_to_quickbooks[code] + "_+_+_+_" + code_to_quickbooks_pitem[code]] = code_to_quickbooks_pitem[code];
 							}
-							if (aggregate[code_to_quickbooks[code] + "____" + code_to_quickbooks_pitem[code]])
+							if (aggregate[code_to_quickbooks[code] + "_+_+_+_" + code_to_quickbooks_pitem[code]])
 							{
 								aggregate[code_to_quickbooks[code] + "_+_+_+_" + code_to_quickbooks_pitem[code]] += Number($scope.users[empId][$scope.users[empId].length-1][col]);
 							}
