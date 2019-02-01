@@ -224,7 +224,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 	{
 		if (col != 0 && col != $scope.users[empId][$scope.users[empId].length-1].length -1)
 		{
-			if ($scope.lookupCode($scope.users[empId][0][col].split('_')[1], cutoff) == "Paid")
+			if ($scope.lookupCode($scope.users[empId][0][col].split('_')[$scope.users[empId][0][col].split('_').length - 1], cutoff) == "Paid")
 			{
 				hours += Number($scope.users[empId][$scope.users[empId].length-1][col]);
 			}
@@ -238,7 +238,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 	{
 		if (col != 0 && col != $scope.users[empId][$scope.users[empId].length-1].length -1)
 		{
-			if ($scope.lookupCode($scope.users[empId][0][col].split('_')[1], cutoff) == "UP Vac")
+			if ($scope.lookupCode($scope.users[empId][0][col].split('_')[$scope.users[empId][0][col].split('_').length - 1], cutoff) == "UP Vac")
 			{
 				logged += Number($scope.users[empId][$scope.users[empId].length-1][col]);
 			}
@@ -343,7 +343,8 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 		}
 		$scope.gridOptions.columnDefs = [{field: 'code', displayName: 'Billing Code'},
 						 {field: 'internal', displayName: 'Internal Label'},
-						 {field: 'quickbooks', displayName: 'Quickbooks Label'},
+						 {field: 'quickbooks', displayName: 'Quickbooks Job'},
+						 {field: 'quickbooks_pitem', displayName: 'Quickbooks PITEM Override'},
 						 {field: 'vacation', width: "8%", displayName: 'Vacation', type: 'boolean'}
 						];
 		$scope.gridOptions.data = $scope.payroll_data.quickbooks_mapping;
@@ -435,18 +436,22 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
     }
     $scope.generateQuickbooks = function () {
 	var code_to_quickbooks = {};
+	var code_to_quickbooks_pitem = {};
 	var vacation_code = null;
 	var vacation_quickbooks = null;
+	var vacation_quickbooks_pitem = null;
 	for (var mapping in $scope.payroll_data.quickbooks_mapping)
 	{
 		if (!$scope.payroll_data.quickbooks_mapping[mapping].vacation)
 		{
 			code_to_quickbooks[$scope.payroll_data.quickbooks_mapping[mapping].code] = $scope.payroll_data.quickbooks_mapping[mapping].quickbooks ? $scope.payroll_data.quickbooks_mapping[mapping].quickbooks : "";
+			code_to_quickbooks_pitem[$scope.payroll_data.quickbooks_mapping[mapping].code] = $scope.payroll_data.quickbooks_mapping[mapping].quickbooks_pitem ? $scope.payroll_data.quickbooks_mapping[mapping].quickbooks_pitem : "";
 		}
 		else
 		{
 			vacation_code = $scope.payroll_data.quickbooks_mapping[mapping].code;
 			vacation_quickbooks = $scope.payroll_data.quickbooks_mapping[mapping].quickbooks;
+			vacation_quickbooks_pitem = $scope.payroll_data.quickbooks_mapping[mapping].quickbooks_pitem ? $scope.payroll_data.quickbooks_mapping[mapping].quickbooks_pitem : "";
 		}
 	}
 	var dashDateStr = $scope.currenttimespanend.getFullYear().toString() + "-" + pad($scope.currenttimespanend.getMonth()+1, 2) + "-" + pad($scope.currenttimespanend.getDate(), 2);
@@ -461,6 +466,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 		var qbName = $scope.payroll_data.employee_info[idx].quickbooksname;
 		var qbItem = $scope.payroll_data.employee_info[idx].quickbooksitem;
 		var qbPitem = $scope.payroll_data.employee_info[idx].quickbookspitem;
+		var pitemOverrides = {};
 		var aggregate = {};
 		if ($scope.users[empId])
 		{
@@ -474,13 +480,17 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 						// Skip over time that was explicitly logged as vacation.  Vacation is calculated.
 						if (code_to_quickbooks[code])
 						{
-							if (aggregate[code_to_quickbooks[code]])
+							if (code_to_quickbooks_pitem[code])
 							{
-								aggregate[code_to_quickbooks[code]] += Number($scope.users[empId][$scope.users[empId].length-1][col]);
+								pitemOverrides[code_to_quickbooks[code] + "_+_+_+_" + code_to_quickbooks_pitem[code]] = code_to_quickbooks_pitem[code];
+							}
+							if (aggregate[code_to_quickbooks[code] + "_+_+_+_" + code_to_quickbooks_pitem[code]])
+							{
+								aggregate[code_to_quickbooks[code] + "_+_+_+_" + code_to_quickbooks_pitem[code]] += Number($scope.users[empId][$scope.users[empId].length-1][col]);
 							}
 							else
 							{
-								aggregate[code_to_quickbooks[code]] = Number($scope.users[empId][$scope.users[empId].length-1][col]);
+								aggregate[code_to_quickbooks[code]+ "_+_+_+_" + code_to_quickbooks_pitem[code]] = Number($scope.users[empId][$scope.users[empId].length-1][col]);
 							}
 						}
 					}
@@ -499,12 +509,23 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 		}
 		for (var quickbooks in aggregate)
 		{
-			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+quickbooks+'\t'+qbName+'\t'+qbItem+'\t'+qbPitem+'\t'+Math.floor(aggregate[quickbooks]).toString() + '.' + pad(Math.round((aggregate[quickbooks] - Math.floor(aggregate[quickbooks])) * 100), 2) +'\t\t0\n';
+			var thisPitem = qbPitem;
+			var quickbookssplit = quickbooks.split('_+_+_+_');
+			if (pitemOverrides[quickbooks])
+			{
+				thisPitem = pitemOverrides[quickbooks];
+			}
+			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+quickbookssplit[0]+'\t'+qbName+'\t'+qbItem+'\t'+thisPitem+'\t'+Math.floor(aggregate[quickbooks]).toString() + '.' + pad(Math.round((aggregate[quickbooks] - Math.floor(aggregate[quickbooks])) * 100), 2) +'\t\t0\n';
+		}
+		var thisPitem = qbPitem;
+		if (vacation_quickbooks_pitem)
+		{
+			thisPitem = vacation_quickbooks_pitem;
 		}
 		var amount_of_vacation = $scope.paidVacationHours(empId);
 		if (amount_of_vacation > 0.00001 && vacation_quickbooks)
 		{
-			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+vacation_quickbooks+'\t'+qbName+'\t'+qbItem+'\t'+qbPitem+'\t'+Math.floor(amount_of_vacation).toString() + '.' + pad(Math.round((amount_of_vacation - Math.floor(amount_of_vacation)) * 100), 2)+'\t\t0\n';
+			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+vacation_quickbooks+'\t'+qbName+'\t'+thisPitem+'\t'+qbPitem+'\t'+Math.floor(amount_of_vacation).toString() + '.' + pad(Math.round((amount_of_vacation - Math.floor(amount_of_vacation)) * 100), 2)+'\t\t0\n';
 		}
 	}
 	$scope.downloadFile("payroll.iif", quickbooksText);
