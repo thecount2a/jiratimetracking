@@ -24,7 +24,7 @@ else
 {
 	// Get connection to redis server
 
-	$redis = new Predis\Client();
+	$redis = new Predis\Client(array('host' => 'redis'));
 
 	$obj = new AuthJiraCert();
 	$client = new SupOAuthClient($obj->consumerKey, $obj->privateKeyFile, $_COOKIE[$COOKIE_PREFIX."_jira_oauth_token"], $_COOKIE[$COOKIE_PREFIX."_jira_oauth_secret"]);
@@ -56,7 +56,7 @@ else
 			if (!$redis->exists($myself["key"].'_projects'))
 			{
 				$url = $obj->jiraBaseUrl . 'rest/api/2/project';
-				$projectListJson = json_encode($client->performRequest($url, "GET"));
+				$projectListJson = json_encode($client->performRequest($url, null, "GET"));
 				$projectList = json_decode($projectListJson);
 				$redis->set($myself["key"].'_projects', $projectListJson);
 				$redis->expire($myself["key"].'_projects', 600);

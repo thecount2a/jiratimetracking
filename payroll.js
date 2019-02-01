@@ -232,31 +232,14 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 	}
 	return hours;
     }
-    $scope.loggedUnpaidVac = function (empId, cutoff) {
-	var logged = 0.0;
-	for (var col in $scope.users[empId][$scope.users[empId].length-1])
-	{
-		if (col != 0 && col != $scope.users[empId][$scope.users[empId].length-1].length -1)
-		{
-			if ($scope.lookupCode($scope.users[empId][0][col].split('_')[$scope.users[empId][0][col].split('_').length - 1], cutoff) == "UP Vac")
-			{
-				logged += Number($scope.users[empId][$scope.users[empId].length-1][col]);
-			}
-		}
-	}
-	return logged;
-    }
     $scope.hoursPaid = function (empId, cutoff) {
-	return Math.min($scope.laborHours(empId) - $scope.loggedUnpaidVac(empId, cutoff), $scope.payableLaborHours(empId, cutoff));
+	return Math.min($scope.laborHours(empId), $scope.payableLaborHours(empId, cutoff));
     }
     $scope.hoursShort = function (empId, cutoff) {
-	return Math.max(Math.max($scope.laborHours(empId) - $scope.payableLaborHours(empId, cutoff), 0) - $scope.loggedUnpaidVac(empId, cutoff), 0);
+	return Math.max(Math.max($scope.laborHours(empId) - $scope.payableLaborHours(empId, cutoff), 0), 0);
     }
     $scope.paidVacationHours = function (empId) {
 	return -$scope.vacationTally(empId, $scope.currenttimespanstart, $scope.currenttimespanend, 0);
-    }
-    $scope.totalPaidFraction = function (empId, cutoff) {
-	return Math.min(($scope.hoursPaid(empId, cutoff) + $scope.paidVacationHours(empId)) / $scope.laborHours(empId), 1);
     }
 
     $scope.vacationTally = function (empId, fromDate, toDate, selectSign = -1) {
@@ -400,14 +383,11 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 				{
 					var empId = $scope.payroll_data.employee_info[idx].id;
 					var empPayableCutoff = $scope.payroll_data.employee_info[idx].project_payable_cutoff;
-					//var earned_rate = $scope.payroll_data.employee_info[idx].annual_vacation_days / (365 * 5 / 7 - $scope.payroll_data.employee_info[idx].annual_vacation_days);
-					//var earned_hours = Math.min($scope.laborHours(empId) - $scope.loggedUnpaidVac(empId), $scope.payableLaborHours(empId, empPayableCutoff)) * earned_rate;
 					$scope.payroll_data.vacation_history.push({id: empId, date: $scope.currenttimespanend, hours: $scope.payroll_data.employee_info[idx].annual_vacation_days * 8.0 / 12.0, comment: "Earned vacation", auto: true});
-					var hours_short = Math.max(Math.max($scope.laborHours(empId) - $scope.payableLaborHours(empId, empPayableCutoff), 0)-$scope.loggedUnpaidVac(empId), 0);
-					var unlogged_vacation_hours = Math.min(hours_short, $scope.vacationTally(empId, $scope.beginningoftime, $scope.currenttimespanend));
-					if (unlogged_vacation_hours > 0.00000001)
+					var hours_short = Math.max(Math.max($scope.laborHours(empId) - $scope.payableLaborHours(empId, empPayableCutoff), 0), 0);
+					if (hours_short > 0.00000001)
 					{
-						$scope.payroll_data.vacation_history.push({id: empId, date: $scope.currenttimespanend, hours: -unlogged_vacation_hours, comment: "Vacation spent", auto: true});
+						$scope.payroll_data.vacation_history.push({id: empId, date: $scope.currenttimespanend, hours: -hours_short, comment: "Vacation spent", auto: true});
 					}
 				}
 				else
