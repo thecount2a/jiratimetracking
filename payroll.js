@@ -525,7 +525,7 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 		var amount_of_vacation = $scope.paidVacationHours(empId);
 		if (amount_of_vacation > 0.00001 && vacation_quickbooks)
 		{
-			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+vacation_quickbooks+'\t'+qbName+'\t'+thisPitem+'\t'+qbPitem+'\t'+Math.floor(amount_of_vacation).toString() + '.' + pad(Math.round((amount_of_vacation - Math.floor(amount_of_vacation)) * 100), 2)+'\t\t0\n';
+			quickbooksText += 'TIMEACT\t'+dateStr+'\t'+vacation_quickbooks+'\t'+qbName+'\t'+qbItem+'\t'+thisPitem+'\t'+Math.floor(amount_of_vacation).toString() + '.' + pad(Math.round((amount_of_vacation - Math.floor(amount_of_vacation)) * 100), 2)+'\t\t0\n';
 		}
 	}
 	$scope.downloadFile("payroll.iif", quickbooksText);
