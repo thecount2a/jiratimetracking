@@ -18,7 +18,7 @@ $lock = null;
 
 function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild = false)
 {
-	$servers = array(array('127.0.0.1', 6379, 0.01));
+	$servers = array(array('redis', 6379, 0.01));
 	// Max number of seconds we will wait before assuming that a previous update died and take over rebuilding the database
 	$maxSeconds = 300;
 	if ($fullRebuild)
@@ -41,7 +41,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 					$lastUpdate = $redis->get("lastIssueUpdate");
 				}
 				$url = $cert->jiraBaseUrl . 'rest/api/2/serverInfo';
-				$serverInfo = $jira->performRequest($url, "GET");
+				$serverInfo = $jira->performRequest($url, null, "GET");
 				$serverTime = DateTime::createFromFormat('Y-m-d\TH:i:s.uO', $serverInfo["serverTime"]);
 				$serverTime->setTimezone(new DateTimeZone($GLOBALS['DEFAULT_TIMEZONE']));
 				$serverTime->sub(new DateInterval("PT".(((int)$serverTime->format('s')) + 60). "S"));
@@ -90,7 +90,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 			for ($i = 0; $i < count($issueList); $i++)
 			{
 				$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueList[$i];
-				$issueInfo = $jira->performRequest($url, "GET");
+				$issueInfo = $jira->performRequest($url, null, "GET");
 				if ($issueInfo["key"] && $issueInfo["key"] == $issueList[$i])
 				{
 					$rebuildChildren = false;
@@ -125,7 +125,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 						$issueList = array_merge($issueList, $additionalIssues);
 					}
 					$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueList[$i]. '/worklog';
-					$workLog = $jira->performRequest($url, "GET");
+					$workLog = $jira->performRequest($url, null, "GET");
 					if ($redis->exists('issue.'.$issueList[$i].'.wl.count'))
 					{
 						$numwl = $redis->get('issue.'.$issueList[$i].'.wl.count');
@@ -149,7 +149,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 					if ($issueInfoRecursive["fields"]["parent"])
 					{
 						//$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueInfoRecursive["fields"]["parent"]["key"];
-						//$issueInfoRecursive = $jira->performRequest($url, "GET");
+						//$issueInfoRecursive = $jira->performRequest($url, null, "GET");
 						$issueInfoRecursive = array("key" => $issueInfoRecursive["fields"]["parent"]["key"], "fields" => array( "summary" => $redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".summary"), "labels" => ($redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".labels") ? json_decode($redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".labels")) : array()), "customfield_10006" => $redis->get('issue.'.$issueInfoRecursive["fields"]["parent"]["key"].".epic")));
 						$accountName = $issueInfoRecursive["fields"]["summary"] . ":" . $accountName;
 						$billingCodes = array_merge($billingCodes, $issueInfoRecursive["fields"]["labels"]);
@@ -158,7 +158,7 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 					if ($issueInfoRecursive["fields"]["customfield_10006"])
 					{
 						//$url = $cert->jiraBaseUrl . 'rest/api/2/issue/'. $issueInfoRecursive["fields"]["customfield_10006"];
-						//$issueInfoRecursive = $jira->performRequest($url, "GET");
+						//$issueInfoRecursive = $jira->performRequest($url, null, "GET");
 						$issueInfoRecursive = array("key" => $issueInfoRecursive["fields"]["customfield_10006"], "fields" => array( "summary" => $redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".summary"), "labels" => ($redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".labels") ? json_decode($redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".labels")) : array()), "customfield_10006" => $redis->get('issue.'.$issueInfoRecursive["fields"]["customfield_10006"].".epic")));
 						$accountName = $issueInfoRecursive["fields"]["summary"] . ":" . $accountName;
 						$billingCodes = array_merge($billingCodes, $issueInfoRecursive["fields"]["labels"]);
@@ -406,7 +406,7 @@ else
 	// Get connection to redis server
 	require "predis/autoload.php";
 
-	$redis = new Predis\Client();
+	$redis = new Predis\Client(array('host' => 'redis'));
 
 	$obj = new AuthJiraCert();
 	$client = new SupOAuthClient($obj->consumerKey, $obj->privateKeyFile, $_COOKIE[$COOKIE_PREFIX."_jira_oauth_token"], $_COOKIE[$COOKIE_PREFIX."_jira_oauth_secret"]);
@@ -616,7 +616,7 @@ window.onload = function() {
 		if (!$redis->exists($myself["key"].'_projects'))
 		{
 			$url = $obj->jiraBaseUrl . 'rest/api/2/project';
-			$projectListJson = json_encode($client->performRequest($url, "GET"));
+			$projectListJson = json_encode($client->performRequest($url, null, "GET"));
 			$projectList = json_decode($projectListJson);
 			$redis->set($myself["key"].'_projects', $projectListJson);
 			$redis->expire($myself["key"].'_projects', 600);
