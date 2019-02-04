@@ -447,6 +447,10 @@ app.controller("payrollController", ["$scope", "$http", "$cookies", "$window", f
 	var dateStr = pad($scope.currenttimespanend.getMonth()+1, 2) + "/" + pad($scope.currenttimespanend.getDate(), 2) + "/" + $scope.currenttimespanend.getFullYear().toString().substr(2, 2);
 	for (var idx in $scope.payroll_data.employee_info)
 	{
+		if (!$scope.payroll_data.employee_info[idx].active)
+		{
+			continue;
+		}
 		var empId = $scope.payroll_data.employee_info[idx].id;
 		var qbName = $scope.payroll_data.employee_info[idx].quickbooksname;
 		var qbItem = $scope.payroll_data.employee_info[idx].quickbooksitem;
