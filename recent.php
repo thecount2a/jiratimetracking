@@ -4,7 +4,7 @@
 	require_once 'AuthJiraCert.php';
 	require "predis/autoload.php";
 
-	$redis = new Predis\Client();
+	$redis = new Predis\Client(array('host' => 'redis'));
 
 	$obj = new AuthJiraCert();
 	$client = new SupOAuthClient($obj->consumerKey, $obj->privateKeyFile, $_COOKIE[$COOKIE_PREFIX."_jira_oauth_token"], $_COOKIE[$COOKIE_PREFIX."_jira_oauth_secret"]);
