@@ -10,18 +10,19 @@
 	$client = new SupOAuthClient($obj->consumerKey, $obj->privateKeyFile, $_COOKIE[$COOKIE_PREFIX."_jira_oauth_token"], $_COOKIE[$COOKIE_PREFIX."_jira_oauth_secret"]);
 	$url = $obj->jiraBaseUrl . 'rest/api/2/myself';
 	$myself = $client->performRequest($url, array("expand"=>"groups"), "GET");
+	$myselfAccountId = str_replace(":", "___", $myself["accountId"]);
 
 	if ($_SERVER['REQUEST_METHOD'] == "POST")
 	{
 		$data = json_decode(file_get_contents('php://input'), true);
 		foreach ($data as $dkey => $dvalue)
 		{
-			$redis->hSet($myself["key"].'_recentTaskMetadata', $dkey, $dvalue);
+			$redis->hSet($myselfAccountId.'_recentTaskMetadata', $dkey, $dvalue);
 		}
 	}
 	else
 	{
-		$data = $redis->hGetAll($myself["key"].'_recentTaskMetadata');
+		$data = $redis->hGetAll($myselfAccountId.'_recentTaskMetadata');
 		echo json_encode($data);
 	}
 	

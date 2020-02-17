@@ -49,15 +49,16 @@ else
 			{
 				$csrftoken = $_COOKIE['XSRF-TOKEN'];
 			}
+			$myselfAccountId = str_replace(":", "___", $myself["accountId"]);
 			if (empty($_COOKIE['timetracking_user']))
 			{
-			    setcookie('timetracking_user', $myself['key']);
+			    setcookie('timetracking_user', $myselfAccountId);
 			}
 			
 			if ($_SERVER['REQUEST_METHOD'] == "GET")
 			{
 				$path = $STORAGE_PATH;
-				$file = $myself['key'].'.blob';
+				$file = $myselfAccountId.'.blob';
 				
 				if ((file_exists($path.'/'.$file) && is_readable($path.'/'.$file) && is_writable($path.'/'.$file)) || (!file_exists($path.'/'.$file) && is_readable($path) && is_writable($path)))
 				{
@@ -75,7 +76,7 @@ else
 			else if ($_SERVER['REQUEST_METHOD'] == "POST")
 			{
 				$path = $STORAGE_PATH;
-				$file = $myself['key'].'.blob';
+				$file = $myselfAccountId.'.blob';
 				if ($_SERVER['HTTP_X_XSRF_TOKEN'] != $csrftoken)
 				{
 					header('HTTP/1.1 500 Internal Server Error', true, 500);

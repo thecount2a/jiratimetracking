@@ -192,7 +192,8 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 						$ledgerreturn = runHledger("-f - print", $timeclock, $ledger);
 						$richerLedger = array();
 						$transactions = explode("\n\n", $ledger);
-						$dailyTotalKey = "dailytotal.".$logTime->format("Y.m.d").".".$workLog["worklogs"][$j]["author"]["key"];
+						$author_accountid = str_replace(":", "___", $workLog["worklogs"][$j]["author"]["accountId"]);
+						$dailyTotalKey = "dailytotal.".$logTime->format("Y.m.d").".".$author_accountid;
 						if ($fullRebuild || !$redis->sIsMember('issue.wl.seen', $issueList[$i].".".$logTime->format("U")))
 						{
 							if (array_key_exists($dailyTotalKey, $userDailyTotals))
@@ -211,14 +212,14 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 							$lines = explode("\n", $transactions[$k]);
 							$commentlines = explode("\n", $workLog["worklogs"][$j]["comment"]);
 							$newLines[] = $lines[0]." ".$commentlines[0];
-							$newLines[] = "    ; user:".$workLog["worklogs"][$j]["author"]["key"];
+							$newLines[] = "    ; user:".$author_accountid;
 							$newLines[] = "    ; billing:".$billingCodeFound;
 							$newLines = array_merge($newLines, array_slice($lines, 1));
 							$richerLedger[] = implode("\n", $newLines);
 						}
 						
 						$wlEntry = array(
-							"a" => $workLog["worklogs"][$j]["author"]["key"],
+							"a" => $author_accountid,
 							"s" => $logTime->format("U"),
 							"d" => $workLog["worklogs"][$j]["timeSpentSeconds"],
 							"c" => $workLog["worklogs"][$j]["comment"],
@@ -264,14 +265,14 @@ function updateIssueDatabase($redis, $jira, $cert, $issue = null, $fullRebuild =
 	}
 }
 
-function getCurrentWorklog($myself, $redis, $worklog_date_string)
+function getCurrentWorklog($myselfAccountId, $redis, $worklog_date_string)
 {
 	$entries = array();
-	$recentData = $redis->hGetAll($myself["key"].'_recentTaskMetadata');
+	$recentData = $redis->hGetAll($myselfAccountId.'_recentTaskMetadata');
 	$recentTasks = array();
-	if ($redis->exists($myself["key"].'_recentTasks'))
+	if ($redis->exists($myselfAccountId.'_recentTasks'))
 	{
-		$recentTasks = json_decode($redis->get($myself["key"].'_recentTasks'));
+		$recentTasks = json_decode($redis->get($myselfAccountId.'_recentTasks'));
 	}
 
 	$worklog_date = date_parse($worklog_date_string);
@@ -412,6 +413,7 @@ else
 	$client = new SupOAuthClient($obj->consumerKey, $obj->privateKeyFile, $_COOKIE[$COOKIE_PREFIX."_jira_oauth_token"], $_COOKIE[$COOKIE_PREFIX."_jira_oauth_secret"]);
 	$url = $obj->jiraBaseUrl . 'rest/api/2/myself';
 	$myself = $client->performRequest($url, array("expand"=>"groups"), "GET");
+	$myselfAccountId = str_replace(":", "___", $myself["accountId"]);
 	$authorizedReporter = false;
 	for ($i = 0; $i < count($myself["groups"]["items"]); $i++)
 	{
@@ -422,9 +424,9 @@ else
 	}
 
 	$currentTask = "";
-	if ($redis->exists($myself["key"].'_currentTask'))
+	if ($redis->exists($myselfAccountId.'_currentTask'))
 	{
-		$currentTask = $redis->get($myself["key"].'_currentTask');
+		$currentTask = $redis->get($myselfAccountId.'_currentTask');
 	}
 
 	$rebuild = false;
@@ -613,17 +615,17 @@ window.onload = function() {
 			echo "<form style=\"display: inline;\" action=\"index.php\" method=\"POST\" id=\"rebuildForm\"><input type=\"hidden\" name=\"rebuild\" value=\"true\" /></form>";
 		}
 		echo "<p align=\"right\">";
-		if (!$redis->exists($myself["key"].'_projects'))
+		if (!$redis->exists($myselfAccountId.'_projects'))
 		{
 			$url = $obj->jiraBaseUrl . 'rest/api/2/project';
 			$projectListJson = json_encode($client->performRequest($url, null, "GET"));
 			$projectList = json_decode($projectListJson);
-			$redis->set($myself["key"].'_projects', $projectListJson);
-			$redis->expire($myself["key"].'_projects', 600);
+			$redis->set($myselfAccountId.'_projects', $projectListJson);
+			$redis->expire($myselfAccountId.'_projects', 600);
 		}
 		else
 		{
-			$projectList = json_decode($redis->get($myself["key"].'_projects'));
+			$projectList = json_decode($redis->get($myselfAccountId.'_projects'));
 		}
 		echo "<b>Projects:</b> ";
 		for ($i = 0; $i < count($projectList); $i++)
@@ -662,9 +664,9 @@ window.onload = function() {
 		}
 		# See if there is a recent task stored
 		$recentTasks = array();
-		if ($redis->exists($myself["key"].'_recentTasks'))
+		if ($redis->exists($myselfAccountId.'_recentTasks'))
 		{
-			$recentTasks = json_decode($redis->get($myself["key"].'_recentTasks'));
+			$recentTasks = json_decode($redis->get($myselfAccountId.'_recentTasks'));
 		}
 		$newTask = "";
 		if ($_SERVER['HTTP_REFERER'] && strpos($_SERVER['HTTP_REFERER'], "https://".$JIRA_DOMAIN."/browse/") === 0)
@@ -699,7 +701,7 @@ window.onload = function() {
 			$newRecentTasks = array();
 			for ($i = count($recentTasks)-1 ; $i >= 0; $i--)
 			{
-				if ($redis->hExists($myself["key"].'_recentTaskMetadata', $recentTasks[$i]."-sel-check"))
+				if ($redis->hExists($myselfAccountId.'_recentTaskMetadata', $recentTasks[$i]."-sel-check"))
 				{
 					array_unshift($newRecentTasks, $recentTasks[$i]);
 				}
@@ -709,20 +711,20 @@ window.onload = function() {
 				}
 			}
 
-			$redis->set($myself["key"].'_recentTasks', json_encode($newRecentTasks));
+			$redis->set($myselfAccountId.'_recentTasks', json_encode($newRecentTasks));
 		}
 		if ($currentTask)
 		{
 			if ($_POST['action'] == "Cancel Task")
 			{
-				$redis->set($myself["key"].'_currentTask', "");
-				$redis->del($myself["key"].'_recentTaskMetadata');
+				$redis->set($myselfAccountId.'_currentTask', "");
+				$redis->del($myselfAccountId.'_recentTaskMetadata');
 				header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
 			}
 			else if ($_POST['action'] == "Stop Task and Log Time")
 			{
-				$redis->set($myself["key"].'_currentTask', "");
-				$startTime = (int) $redis->get($myself["key"].'_currentTaskStartTime');
+				$redis->set($myselfAccountId.'_currentTask', "");
+				$startTime = (int) $redis->get($myselfAccountId.'_currentTaskStartTime');
 
 				$endTime = time() - $offset;
 
@@ -730,14 +732,14 @@ window.onload = function() {
 				$timeStarted = date("Y-m-d\TH:i:s.000O", $startTime);
 				$res = $client->performRequest($url, json_encode(array("comment"=>$_POST["memo"], "started"=>$timeStarted, "timeSpentSeconds"=> (string)($endTime - $startTime))), "POST");
 				updateIssueDatabase($redis, $client, $obj, $currentTask);
-				$redis->del($myself["key"].'_recentTaskMetadata');
+				$redis->del($myselfAccountId.'_recentTaskMetadata');
 
 				header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
 			}
 			else if ($_POST['action'] == "Stop Task and Log Rounded Time")
 			{
-				$redis->set($myself["key"].'_currentTask', "");
-				$startTime = (int) $redis->get($myself["key"].'_currentTaskStartTime');
+				$redis->set($myselfAccountId.'_currentTask', "");
+				$startTime = (int) $redis->get($myselfAccountId.'_currentTaskStartTime');
 
 				$endTime = $startTime + ((int) $_POST['roundedseconds']) - $offset;
 
@@ -745,7 +747,7 @@ window.onload = function() {
 				$timeStarted = date("Y-m-d\TH:i:s.000O", $startTime);
 				$res = $client->performRequest($url, json_encode(array("comment"=>$_POST["memo"], "started"=>$timeStarted, "timeSpentSeconds"=> (string)($endTime - $startTime))), "POST");
 				updateIssueDatabase($redis, $client, $obj, $currentTask);
-				$redis->del($myself["key"].'_recentTaskMetadata');
+				$redis->del($myselfAccountId.'_recentTaskMetadata');
 
 				header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
 			}
@@ -756,8 +758,8 @@ window.onload = function() {
 			{
 				if ($newTask)
 				{
-					$redis->set($myself["key"].'_currentTask', $newTask);
-					$redis->set($myself["key"].'_currentTaskStartTime', time() - $offset);
+					$redis->set($myselfAccountId.'_currentTask', $newTask);
+					$redis->set($myselfAccountId.'_currentTaskStartTime', time() - $offset);
 					header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
 				}
 				else
@@ -773,7 +775,7 @@ window.onload = function() {
 			{
 				if ($_POST['confirm_early_submit'] == "on" && $_POST['confirm_date'] == "on")
 				{
-					$worklog = getCurrentWorklog($myself, $redis, $_POST['worklog_date']);
+					$worklog = getCurrentWorklog($myselfAccountId, $redis, $_POST['worklog_date']);
 					foreach($worklog as $entry)
 					{
 						if ($entry["task"] != "BREAK")
@@ -784,7 +786,7 @@ window.onload = function() {
 							updateIssueDatabase($redis, $client, $obj, $entry["task"]);
 						}
 					}
-					$redis->del($myself["key"].'_recentTaskMetadata');
+					$redis->del($myselfAccountId.'_recentTaskMetadata');
 				}
 
 				header('Location: https://'.$HOSTED_DOMAIN.$_SERVER['REQUEST_URI']);
@@ -793,7 +795,7 @@ window.onload = function() {
 			{
 				echo "<form action=\"index.php\" method=\"POST\"><h3>Please confirm your worklog for ".$_POST['worklog_date'].": </h3>";
 				$currentTime = new DateTime("now", new DateTimeZone($DEFAULT_TIMEZONE));
-				$recentData = $redis->hGetAll($myself["key"].'_recentTaskMetadata');
+				$recentData = $redis->hGetAll($myselfAccountId.'_recentTaskMetadata');
 				$worklog_date = date_parse($_POST['worklog_date']);
 				$arrival_time = date_parse($recentData["arrival_time"]);
 				$break_time = date_parse($recentData["break_time"]);
@@ -808,7 +810,7 @@ window.onload = function() {
 					{
 						echo $warning."<br>";
 					}
-					foreach($worklog_date["warnings"] as $error)
+					foreach($worklog_date["errors"] as $error)
 					{
 						echo $error."<br>";
 					}
@@ -878,7 +880,7 @@ window.onload = function() {
 						$savedisabled = true;
 						echo "You have submitted a worklog for a date that is not today.  Did you intend to do this? Please select this checkbox to confirm: <input type=\"checkbox\" name=\"confirm_date\" onchange=\"document.getElementById('save_worklog_button').disabled = !this.checked;\"/><br><br>";
 					}
-					$worklog = getCurrentWorklog($myself, $redis, $_POST['worklog_date']);
+					$worklog = getCurrentWorklog($myselfAccountId, $redis, $_POST['worklog_date']);
 					if ($worklog[count($worklog)-1]["startTime"] + $worklog[count($worklog)-1]["duration"] > time() + 20*60)
 					{
 						$savedisabled = true;
@@ -917,17 +919,17 @@ window.onload = function() {
 		}
 		// Now get current task again (it may have changed)
 		$currentTask = "";
-		if ($redis->exists($myself["key"].'_currentTask'))
+		if ($redis->exists($myselfAccountId.'_currentTask'))
 		{
-			$currentTask = $redis->get($myself["key"].'_currentTask');
+			$currentTask = $redis->get($myselfAccountId.'_currentTask');
 		}
 
 		if ($currentTask)
 		{
-			$currentTaskStartTime = (int) $redis->get($myself["key"].'_currentTaskStartTime');
+			$currentTaskStartTime = (int) $redis->get($myselfAccountId.'_currentTaskStartTime');
 
 			$workTime = time() - $currentTaskStartTime;
-			$dailyTotal = (int) $redis->get("dailytotal.".date("Y.m.d", $currentTaskStartTime).".".$myself["key"]);
+			$dailyTotal = (int) $redis->get("dailytotal.".date("Y.m.d", $currentTaskStartTime).".".$myselfAccountId);
 			$rounded = max(0, (round(($dailyTotal + $workTime) / 1800.0) * 1800) - $dailyTotal);
 			echo "<table width=\"100%\" class=\"niceborder\" cellpadding=\"8\" border=\"1\">";
 			echo "<tr><td align=\"right\" width=\"20%\">Current task:</td><td><a href=\"https://".$JIRA_DOMAIN."/browse/".$currentTask."\">".$currentTask."</a></td></tr><tr><td align=\"right\">Started at:</td><td>".date("Y-m-d H:i:s", $currentTaskStartTime)."</td></tr><tr><td align=\"right\">Elapsed time:</td><td><b>".sprintf('%02d:%02d:%02d', ($workTime/3600),($workTime/60%60), $workTime%60)."</b></td></tr><tr><td align=\"right\">Rounded time:</td><td><b>".sprintf('%02d:%02d:%02d', ($rounded/3600),($rounded/60%60), $rounded%60)." for a total of ".sprintf('%02d:%02d:%02d', (($rounded+$dailyTotal)/3600),(($rounded+$dailyTotal)/60%60), ($rounded+$dailyTotal)%60)." worked today</b></td></tr><tr><td align=\"right\">Task summary:</td><td>".htmlentities($redis->get('issue.'.$currentTask.'.summary')). "</td></tr>";
@@ -1020,7 +1022,7 @@ window.onload = function() {
 		for ($i = 0; $i < count($itemObjs); $i++)
 		{
 			$obj = json_decode($itemObjs[$i]);
-			if ($obj->a == $myself["key"])
+			if ($obj->a == $myselfAccountId)
 			{
 				$ledgerStr = preg_replace("/billing:[A-Z]*_/", "billing:", $ledgerStr.$obj->l)."\n";
 
