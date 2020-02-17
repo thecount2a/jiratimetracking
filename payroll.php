@@ -60,7 +60,11 @@ else
 				$path = $STORAGE_PATH;
 				$file = $myselfAccountId.'.blob';
 				
-				if ((file_exists($path.'/'.$file) && is_readable($path.'/'.$file) && is_writable($path.'/'.$file)) || (!file_exists($path.'/'.$file) && is_readable($path) && is_writable($path)))
+				if (!file_exists($path.'/'.$file) && is_readable($path) && is_writable($path))
+				{
+					echo "";
+				}
+				else if (file_exists($path.'/'.$file) && is_readable($path.'/'.$file) && is_writable($path.'/'.$file))
 				{
 					echo file_get_contents($path.'/'.$file);
 				}
@@ -69,7 +73,7 @@ else
 					header('HTTP/1.1 500 Internal Server Error', true, 500);
 					if (!is_readable($path)) { echo "Storage dir not readable"; }
 					else if (!is_writable($path)) { echo "Storage dir not writable"; }
-					else if (!is_writable($path.'/'.$file)) { echo "Storage file not readable"; }
+					else if (!is_readable($path.'/'.$file)) { echo "Storage file not readable"; }
 					else if (!is_writable($path.'/'.$file)) { echo "Storage file not writable"; }
 				}
 			}
@@ -105,7 +109,7 @@ else
 						if (!preg_match($validate, $contents)) { echo "Data has invalid characters in it"; }
 						else if (!is_readable($path)) { echo "Storage dir not readable"; }
 						else if (!is_writable($path)) { echo "Storage dir not writable"; }
-						else if (!is_writable($path.'/'.$file)) { echo "Storage file not readable"; }
+						else if (!is_readable($path.'/'.$file)) { echo "Storage file not readable"; }
 						else if (!is_writable($path.'/'.$file)) { echo "Storage file not writable"; }
 					}
 				}
